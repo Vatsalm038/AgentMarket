@@ -20,8 +20,8 @@ Total: ~50 hours over ~16 calendar days. Ship by end of Sunday W3.
 
 ## Day 1 — Foundation + Spine
 
-- [ ] 1.1 Restructure repo (backend/, mcp-server/, frontend/, docs/, .claude/) — 30m
-- [ ] 1.2 Schema migration: drop old, add merchants/products/merchant_agents/agent_skills/signed_receipts. Fix FK drift. — 60m
+- [x] 1.1 Restructure repo (backend/, mcp-server/, frontend/, docs/, .claude/) — 30m
+- [x] 1.2 Schema migration: drop old, add merchants/products/merchant_agents/agent_skills/signed_receipts. Fix FK drift. — 60m (~75m actual; +idempotency_keys table, signed_payload columns, replay flat columns)
 - [ ] 1.3 RSA → Ed25519 in identity.py + settlement.py — 45m
 - [ ] 1.4 Fix policy_id linkage in receipts — 20m
 - [ ] 1.5 Add idempotency keys to settlement — 45m
@@ -82,4 +82,12 @@ Total: ~50 hours over ~16 calendar days. Ship by end of Sunday W3.
 ---
 
 ## Recent decisions log
-_(append decisions as you make them)_
+- 2026-05-07 (Day 0, pre-Sat-W1): repo restructured flat `backend/*.py` rather
+  than nested `domain/adapters/api`. Layering will emerge as 1.3/1.7 rewrite
+  modules. Avoids dead-weight churn in 1.1.
+- 2026-05-07: 1.2 expanded by ~15m to absorb architect review (idempotency
+  table, signed_payload, revoked_at, razorpay IDs on receipts, flat replay
+  columns). All confirmed by user before write.
+- 2026-05-07: ADR-009 (JSONB embeddings) and ADR-010 (DID namespace) added.
+- 2026-05-07: Approval-status columns on negotiation_sessions deferred to
+  backlog Tier 1.5 — MCP-first flow has no separate approval step.

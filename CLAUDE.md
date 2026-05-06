@@ -101,10 +101,17 @@ not personas. Currently configured:
 
 ## Active context
 
-**Calendar day:** _(update each session)_
-**Current ticket:** _(update)_
-**Last decision:** _(update)_
-**Blockers:** _(update)_
+**Calendar day:** 2026-05-07 (Thu, Day 0 — pre Sat-W1 kickoff). 1.1 + 1.2 shipped 2 days early.
+**Current ticket:** Next up — 1.3 (RSA → Ed25519 in identity.py + settlement.py, 45m)
+**Last decision:** ADR-010 — DID namespace (`did:agent:*` for buyers, `did:merchant:*` for merchants) enforced by app-side ID generators.
+**Blockers:** None. 1.3 is greenfield rewrite with the schema already in place.
+
+**Environment notes**
+- Python 3.12 venv at `/home/vatsal/personal/agent-market/.venv` (gitignored)
+- Postgres 12.22 local, db `agentdb`, user `nimbbl`, pgcrypto enabled
+- Migration `365bcb27952f` (initial schema) applied and at head
+- `_env.example` lives at repo root (placeholders); real `.env` is yours, gitignored, with the OpenAI key under `OPENAI_API_KEY` (not `ANTHROPIC_API_KEY`)
+- Python source layout is **flat under `backend/`** for now — the domain/adapters/api split will appear naturally as 1.3 (Ed25519) and 1.7 (DB-backed auction) rewrite those modules
 
 ## What this project is NOT (out of scope for MVP)
 
