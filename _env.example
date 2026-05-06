@@ -1,2 +1,17 @@
+# Database
 DATABASE_URL=postgresql+asyncpg://agentuser:agentpass@localhost/agentdb
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# LLM provider (ADR-002: OpenAI is canonical; Anthropic kept as fallback for demo)
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-your-openai-key-here
+# ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here  # optional fallback
+
+# Razorpay (test mode only — ADR-005)
+RAZORPAY_KEY_ID=rzp_test_your_test_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_test_secret
+
+# MCP server
+MCP_PORT=8001
+
+# Backend
+BACKEND_PORT=8000
