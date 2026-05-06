@@ -59,4 +59,30 @@ See docs/design-system.md for full rules.
 
 ---
 
+## ADR-009 | Day 1 | Accepted
+**Decision:** Store product embeddings as `JSONB` float arrays for MVP. Defer
+`pgvector` until post-hire scale demands it.
+**Context:** Local Postgres (12.22) does not have `pgvector` available;
+installing requires `apt install postgresql-12-pgvector` + server restart.
+Embedding count at MVP demo is ~800 (20 merchants × ~40 products), so an
+in-Python cosine similarity scan is O(800) per matcher call — well under 10ms.
+**Consequences:** Matcher (ticket 2.1) loads all active product embeddings into
+memory and computes similarity in numpy. Will not scale beyond ~10k products;
+swap to `pgvector` is a one-migration job (alter column type to `vector(1536)`,
+add ivfflat index). Captured `embedding_model` and `embedding_generated_at`
+columns now so a future model swap can identify stale rows.
+
+## ADR-010 | Day 1 | Accepted
+**Decision:** DID namespace prefixes — buyers use `did:agent:*`, merchants
+use `did:merchant:*`. Enforced by app-side ID generators, not a DB CHECK.
+**Context:** `agents.id` and `merchant_agents.id` are both string PKs. A
+careless join could silently match a buyer DID against a merchant DID and
+return wrong rows. Architect flagged this during 1.2 review.
+**Consequences:** `generate_agent_id()` and `generate_merchant_agent_id()`
+will live in domain code with the prefix baked in. Migration enforces FK
+target tables, which prevents the bug at the schema level; the prefix is
+defence-in-depth.
+
+---
+
 _(append new ADRs below as decisions are made)_

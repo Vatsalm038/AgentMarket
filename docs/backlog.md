@@ -11,6 +11,13 @@
 - [ ] Buyer dashboard (currently MCP-only)
 - [ ] Merchant dashboard (currently SQL-only)
 
+## Tier 1.5 — schema items deferred from 1.2
+- [ ] `negotiation_sessions.approval_status` + `approved_at` + `approved_by` —
+  buyer-approval gate before settlement. Deferred because MCP-first flow
+  has no separate approval step in the MVP. Add when web-first flow lands.
+- [ ] Swap `products.embedding` JSONB → `pgvector` `vector(1536)` once
+  embedding count crosses ~10k or matcher latency exceeds 50ms.
+
 ## Tier 2 — product polish
 - [ ] Sandboxed custom agent skills
 - [ ] Skill marketplace
