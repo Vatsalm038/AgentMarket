@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AgentPay — Multi-Merchant Auction</title>
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800&family=Rubik:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0f2456;--navy2:#1a3a7a;--navy3:#2952a3;--navy-light:#e8eef9;
+  --teal:#0891b2;--teal-bg:#ecfeff;
+  --ink:#111827;--ink2:#374151;--ink3:#6b7280;--ink4:#9ca3af;
+  --bg:#f4f6fb;--bg2:#ffffff;--bg3:#eef1f8;
+  --border:#dde3f0;
+  --green:#059669;--green-bg:#ecfdf5;
+  --red:#dc2626;--red-bg:#fef2f2;
+  --amber:#d97706;--amber-bg:#fffbeb;
+  --gold:#b45309;
+  --accent:#2563eb;--accent-bg:#eff6ff;
+  --display:'Cabinet Grotesk',sans-serif;
+  --body:'Rubik',sans-serif;
+  --radius:12px;--radius-sm:8px;
+  --shadow:0 1px 3px rgba(15,36,86,0.07);
+  --shadow-md:0 4px 16px rgba(15,36,86,0.10);
+}
+body{font-family:var(--body);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6;min-height:100vh}
+*{box-sizing:border-box}
+
+/* ─ TOPBAR ─ */
+.topbar{
+  background:var(--navy);padding:0 32px;height:58px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-ico{width:34px;height:34px;background:rgba(255,255,255,0.12);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px}
+.brand-name{font-family:var(--display);font-size:18px;font-weight:800;color:#fff;letter-spacing:-0.3px}
+.brand-name em{font-style:normal;color:#93c5fd}
+.page-label{font-size:11px;color:rgba(255,255,255,0.35);margin-left:4px}
+.back-link{
+  display:flex;align-items:center;gap:6px;padding:7px 16px;
+  background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);
+  color:rgba(255,255,255,0.7);border-radius:var(--radius-sm);
+  font-size:12px;font-weight:500;text-decoration:none;transition:all 0.15s;
+}
+.back-link:hover{background:rgba(255,255,255,0.14);color:#fff}
+
+/* ─ LAYOUT ─ */
+.wrap{max-width:960px;margin:0 auto;padding:28px 24px}
+
+/* ─ CARD ─ */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px}
+.card-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.ch-l{display:flex;align-items:center;gap:10px}
+.ch-ico{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.ch-ico.navy{background:var(--navy-light);color:var(--navy2)}
+.ch-ico.green{background:var(--green-bg);color:var(--green)}
+.ch-ico.amber{background:var(--amber-bg);color:var(--amber)}
+.ch-title{font-family:var(--display);font-size:14px;font-weight:700;color:var(--ink)}
+.ch-sub{font-size:11px;color:var(--ink3);margin-top:1px}
+
+/* ─ FORM ─ */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:22px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.full{grid-column:1/-1}
+label{font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--ink3)}
+input,select,textarea{
+  padding:10px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  font-size:13px;font-family:var(--body);color:var(--ink);background:var(--bg2);
+  outline:none;transition:border-color 0.15s;
+}
+input:focus,textarea:focus{border-color:var(--navy3)}
+.merchant-pick{display:flex;gap:8px}
+.mp-btn{
+  flex:1;padding:10px;border:2px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--bg2);cursor:pointer;text-align:center;font-family:var(--display);
+  font-size:14px;font-weight:700;color:var(--ink3);transition:all 0.15s;
+}
+.mp-btn.active{border-color:var(--navy3);color:var(--navy2);background:var(--navy-light)}
+.form-foot{padding:0 22px 22px}
+.launch-btn{
+  width:100%;padding:14px;background:var(--navy);color:#fff;border:none;
+  border-radius:var(--radius-sm);font-family:var(--display);font-size:15px;
+  font-weight:700;cursor:pointer;transition:opacity 0.15s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.launch-btn:hover{background:var(--navy2)}
+.launch-btn:disabled{opacity:0.45;cursor:not-allowed}
+
+/* ─ ARENA ─ */
+.arena{display:none}
+.arena.on{display:block}
+
+.phase-bar{
+  display:flex;align-items:center;gap:12px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 20px;margin-bottom:20px;box-shadow:var(--shadow);
+}
+.phase-num{
+  font-family:var(--display);font-size:11px;font-weight:700;
+  padding:4px 10px;border-radius:20px;background:var(--navy-light);color:var(--navy2);
+}
+.phase-title{font-family:var(--display);font-size:15px;font-weight:700;color:var(--ink)}
+.phase-sub{font-size:12px;color:var(--ink3);margin-top:1px}
+
+/* ─ MERCHANT GRID ─ */
+.merch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+.merch-card{
+  background:var(--bg2);border:2px solid var(--border);border-radius:var(--radius);
+  padding:18px;box-shadow:var(--shadow);transition:all 0.3s;position:relative;
+}
+.merch-card.quoting{border-color:var(--amber);animation:qpulse 1s ease-in-out infinite}
+@keyframes qpulse{0%,100%{border-color:var(--amber)}50%{border-color:#fbbf24;box-shadow:0 0 0 4px var(--amber-bg)}}
+.merch-card.winner{border-color:var(--green);background:var(--green-bg)}
+.merch-card.loser{opacity:0.38;filter:grayscale(0.5)}
+.merch-crown{position:absolute;top:12px;right:12px;font-size:20px;animation:crownIn 0.4s cubic-bezier(0.4,0,0.2,1)}
+@keyframes crownIn{from{opacity:0;transform:scale(0.4) rotate(-15deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+.merch-name{font-family:var(--display);font-size:13px;font-weight:700;color:var(--ink);margin-bottom:3px}
+.merch-status{font-size:11px;color:var(--ink3);margin-bottom:12px;min-height:16px}
+.merch-price{font-family:var(--display);font-size:26px;font-weight:800;color:var(--ink);letter-spacing:-0.5px;margin-bottom:6px;transition:color 0.3s}
+.merch-price.loading{color:var(--ink4);animation:blink 1s step-end infinite}
+.merch-price.winner-price{color:var(--green)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.merch-pitch{font-size:12px;color:var(--ink3);line-height:1.4;min-height:28px}
+
+/* ─ BUYER DECISION ─ */
+.buyer-dec{
+  background:var(--navy-light);border:1px solid var(--border2,#c8d0e8);
+  border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;
+  display:none;animation:fadeIn 0.3s ease;
+}
+.buyer-dec.on{display:flex;align-items:flex-start;gap:12px}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.buyer-dec-ico{font-size:22px;flex-shrink:0;margin-top:2px}
+.buyer-dec-title{font-family:var(--display);font-size:12px;font-weight:700;color:var(--navy2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.buyer-dec-text{font-size:13px;color:var(--ink2)}
+
+/* ─ WINNER BANNER ─ */
+.winner-banner{
+  background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);
+  color:#fff;border-radius:var(--radius);padding:22px 28px;
+  margin-bottom:20px;display:none;animation:slideIn 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+.winner-banner.on{display:flex;align-items:center;justify-content:space-between}
+@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+.wb-left h2{font-family:var(--display);font-size:20px;font-weight:800;margin-bottom:4px}
+.wb-left p{font-size:13px;opacity:0.7}
+.wb-right{text-align:right}
+.wb-price{font-family:var(--display);font-size:34px;font-weight:800;letter-spacing:-1px}
+.wb-saving{font-size:12px;opacity:0.7;margin-top:2px}
+
+/* ─ QUOTES TABLE ─ */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:10px 20px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--ink3);background:var(--bg3);border-bottom:1px solid var(--border)}
+.tbl td{padding:13px 20px;border-bottom:1px solid var(--border);font-size:13px;color:var(--ink2);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.winner-row td{background:var(--green-bg)!important}
+.price-cell{font-family:var(--display);font-size:15px;font-weight:800}
+
+/* ─ SETTLEMENT ─ */
+.upi-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.upi-chip{
+  padding:7px 16px;border:1.5px solid var(--border);border-radius:20px;
+  font-size:12px;font-family:var(--display);font-weight:600;cursor:pointer;
+  transition:all 0.15s;background:var(--bg2);color:var(--ink2);
+}
+.upi-chip.active{border-color:var(--navy3);color:var(--navy2);background:var(--navy-light)}
+.upi-chip.fail.active{border-color:var(--red);color:var(--red);background:var(--red-bg)}
+.settle-btn{
+  padding:12px 24px;background:var(--green);color:#fff;border:none;
+  border-radius:var(--radius-sm);font-family:var(--display);font-size:14px;
+  font-weight:700;cursor:pointer;transition:opacity 0.15s;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.settle-btn:hover{opacity:0.88}
+.settle-btn:disabled{opacity:0.45;cursor:not-allowed}
+.receipt-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}
+.receipt-field{background:var(--bg3);border-radius:var(--radius-sm);padding:13px}
+.rf-label{font-size:10px;font-weight:700;letter-spacing:0.7px;text-transform:uppercase;color:var(--ink3);margin-bottom:3px}
+.rf-value{font-family:var(--display);font-size:13px;font-weight:600;color:var(--ink);word-break:break-all}
+.rf-value.large{font-size:20px;font-weight:800}
+.rf-value.success{color:var(--green)}
+
+/* ─ RESET BTN ─ */
+.reset-wrap{text-align:center;padding:8px 0 16px}
+.reset-btn{background:none;border:1px solid var(--border);padding:9px 24px;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;color:var(--ink3);font-family:var(--body);transition:all 0.15s}
+.reset-btn:hover{background:var(--bg3);color:var(--ink2)}
+
+/* ─ MISC ─ */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block}
+.spinner.dark{border-color:var(--border);border-top-color:var(--navy3)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;box-shadow:var(--shadow-md);z-index:999;transform:translateY(80px);opacity:0;transition:all 0.25s}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.info{background:var(--navy);color:#fff}
+.toast.success{background:var(--green);color:#fff}
+.toast.error{background:var(--red);color:#fff}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-ico">🤝</div>
+    <div>
+      <div class="brand-name">Agent<em>Pay</em> <span class="page-label">/ Multi-Merchant Auction</span></div>
+    </div>
+  </div>
+  <a href="index.html" class="back-link">← Back to Dashboard</a>
+</div>
+
+<div class="wrap">
+
+  <!-- ══ CONFIG ══ -->
+  <div class="card" id="config-card">
+    <div class="card-head">
+      <div class="ch-l">
+        <div class="ch-ico amber">⚡</div>
+        <div>
+          <div class="ch-title">Auction Setup</div>
+          <div class="ch-sub">Multiple merchants compete — buyer agent picks the best deal automatically</div>
+        </div>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Buyer Agent ID</label>
+        <input type="text" id="f-agent" placeholder="did:agent:..."/>
+      </div>
+      <div class="field">
+        <label>Item to Purchase</label>
+        <input type="text" id="f-item" value="Cloud Storage Subscription (Annual)"/>
+      </div>
+      <div class="field">
+        <label>Listed Price (₹)</label>
+        <input type="number" id="f-price" value="1200"/>
+      </div>
+      <div class="field">
+        <label>Number of Merchants</label>
+        <div class="merchant-pick">
+          <button class="mp-btn" onclick="setN(2,this)">2</button>
+          <button class="mp-btn active" onclick="setN(3,this)">3</button>
+          <button class="mp-btn" onclick="setN(4,this)">4</button>
+          <button class="mp-btn" onclick="setN(5,this)">5</button>
+        </div>
+      </div>
+      <div class="field full">
+        <label>Buyer Priorities (natural language)</label>
+        <input type="text" id="f-priorities" value="lowest price with fast delivery and good support"/>
+      </div>
+      <div class="field full">
+        <label>Agent Private Key</label>
+        <textarea id="f-key" rows="3" placeholder="-----BEGIN PRIVATE KEY-----&#10;Paste your key here...&#10;-----END PRIVATE KEY-----" style="resize:none;font-size:11px;font-family:monospace"></textarea>
+      </div>
+    </div>
+    <div class="form-foot">
+      <button class="launch-btn" onclick="launch()" id="launch-btn">
+        ⚡ Launch Auction
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ ARENA ══ -->
+  <div class="arena" id="arena">
+
+    <!-- Phase bar -->
+    <div class="phase-bar">
+      <div class="phase-num" id="ph-num">Phase 1</div>
+      <div>
+        <div class="phase-title" id="ph-title">Collecting quotes...</div>
+        <div class="phase-sub" id="ph-sub"></div>
+      </div>
+    </div>
+
+    <!-- Merchant cards -->
+    <div class="merch-grid" id="merch-grid"></div>
+
+    <!-- Buyer decision -->
+    <div class="buyer-dec" id="buyer-dec">
+      <div class="buyer-dec-ico">🤖</div>
+      <div>
+        <div class="buyer-dec-title">Buyer Agent Decision</div>
+        <div class="buyer-dec-text" id="buyer-dec-text"></div>
+      </div>
+    </div>
+
+    <!-- Winner banner -->
+    <div class="winner-banner" id="winner-banner">
+      <div class="wb-left">
+        <h2 id="wb-name">Winner</h2>
+        <p id="wb-reason"></p>
+      </div>
+      <div class="wb-right">
+        <div class="wb-price" id="wb-price"></div>
+        <div class="wb-saving" id="wb-saving"></div>
+      </div>
+    </div>
+
+    <!-- Quotes table -->
+    <div class="card" id="quotes-card" style="display:none">
+      <div class="card-head">
+        <div class="ch-l">
+          <div class="ch-ico navy">📊</div>
+          <div class="ch-title">All Quotes Comparison</div>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Rank</th><th>Merchant</th><th>Quote</th><th>Saved vs Listed</th><th>Pitch</th></tr></thead>
+          <tbody id="quotes-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Settlement -->
+    <div class="card" id="settle-card" style="display:none">
+      <div class="card-head">
+        <div class="ch-l">
+          <div class="ch-ico green">💳</div>
+          <div>
+            <div class="ch-title">Payment Settlement</div>
+            <div class="ch-sub">Settle via Razorpay UPI (test mode)</div>
+          </div>
+        </div>
+        <span style="font-size:11px;font-family:monospace;color:var(--ink3);background:var(--amber-bg);padding:3px 9px;border-radius:4px;font-weight:600">TEST MODE</span>
+      </div>
+      <div style="padding:22px">
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">Select UPI VPA</div>
+          <div class="upi-row">
+            <button class="upi-chip active" onclick="setUPI('success@razorpay',this)">✅ success@razorpay</button>
+            <button class="upi-chip fail" onclick="setUPI('failure@razorpay',this)">❌ failure@razorpay (test error)</button>
+          </div>
+          <div style="font-size:11px;color:var(--ink4)">success@razorpay always succeeds in test mode · use failure@razorpay to test error handling</div>
+        </div>
+        <button class="settle-btn" onclick="settle()" id="settle-btn">
+          💳 Settle Payment via UPI
+        </button>
+        <div id="receipt" style="display:none">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--ink3);margin-top:22px;margin-bottom:12px">Payment Receipt</div>
+          <div class="receipt-grid" id="receipt-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="reset-wrap">
+      <button class="reset-btn" onclick="resetAll()">↩ Run Another Auction</button>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:8000';
+let numMerch = 3;
+let upiVpa = 'success@razorpay';
+let auctionResult = null;
+
+function setN(n, btn) {
+  numMerch = n;
+  document.querySelectorAll('.mp-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function setUPI(vpa, btn) {
+  upiVpa = vpa;
+  document.querySelectorAll('.upi-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function launch() {
+  const agentId  = document.getElementById('f-agent').value.trim();
+  const item     = document.getElementById('f-item').value.trim();
+  const price    = parseFloat(document.getElementById('f-price').value);
+  const pri      = document.getElementById('f-priorities').value.trim();
+  const key      = document.getElementById('f-key').value.trim();
+
+  if (!agentId) { toast('Enter Agent ID', 'error'); return; }
+  if (!item)    { toast('Enter item name', 'error'); return; }
+  if (!key)     { toast('Paste your private key', 'error'); return; }
+
+  const btn = document.getElementById('launch-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Launching auction...';
+
+  document.getElementById('arena').classList.add('on');
+  document.getElementById('config-card').style.opacity = '0.5';
+  document.getElementById('config-card').style.pointerEvents = 'none';
+  document.getElementById('winner-banner').classList.remove('on');
+  document.getElementById('buyer-dec').classList.remove('on');
+  document.getElementById('quotes-card').style.display = 'none';
+  document.getElementById('settle-card').style.display = 'none';
+  document.getElementById('receipt').style.display = 'none';
+
+  buildCards(numMerch);
+  setPhase(1, `${numMerch} merchants are preparing quotes`, 'Competitive bidding in progress...');
+
+  await delay(400);
+  document.querySelectorAll('.merch-card').forEach((c, i) => {
+    setTimeout(() => c.classList.add('quoting'), i * 120);
+  });
+
+  try {
+    const r = await fetch(API + '/commerce/auction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        buyer_agent_id:  agentId,
+        agent_private_key: key.replace(/\\n/g, '\n'),
+        item, listed_price: price,
+        num_merchants: numMerch,
+        buyer_priorities: pri,
+        use_razorpay: false
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) { toast(data.detail || 'Auction failed', 'error'); resetBtn(); return; }
+    auctionResult = data;
+    await showResult(data, price);
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+    resetBtn();
+  }
+}
+
+function buildCards(n) {
+  const names = ['QuickCommerce Pro','ValueMart Agent','PrimeDeal Bot','SwiftSell AI','BargainBot X','TradeAgent One'];
+  const grid = document.getElementById('merch-grid');
+  grid.style.gridTemplateColumns = n <= 3 ? 'repeat(3,1fr)' : n === 4 ? 'repeat(2,1fr)' : 'repeat(3,1fr)';
+  grid.innerHTML = Array(n).fill(0).map((_,i) => `
+    <div class="merch-card" id="mc${i}">
+      <div class="merch-name">${names[i % names.length]}</div>
+      <div class="merch-status" id="ms${i}">Preparing competitive quote...</div>
+      <div class="merch-price loading" id="mq${i}">₹ —</div>
+      <div class="merch-pitch" id="mp${i}"></div>
+    </div>`).join('');
+}
+
+async function showResult(data, listedPrice) {
+  const quotes = data.all_quotes || [];
+  const winner = data.winner;
+
+  setPhase(1, 'All quotes received', `${quotes.length} merchants responded`);
+
+  for (let i = 0; i < quotes.length; i++) {
+    const q = quotes[i];
+    const card = document.getElementById(`mc${i}`);
+    if (!card) continue;
+    card.classList.remove('quoting');
+    document.getElementById(`mq${i}`).classList.remove('loading');
+    document.getElementById(`mq${i}`).textContent = `₹${q.quote?.toFixed(2) || '—'}`;
+    document.getElementById(`mp${i}`).textContent = q.pitch || '';
+    document.getElementById(`ms${i}`).textContent = 'Quote submitted ✓';
+    await delay(280);
+  }
+
+  await delay(500);
+  setPhase(2, 'Buyer agent evaluating all quotes', 'Comparing price, pitch, and priorities...');
+  await delay(1200);
+
+  if (data.status !== 'settled' || !winner) {
+    toast(data.reason || 'No deal', 'error');
+    setPhase(2, data.reason || 'Auction failed', '');
+    resetBtn(); return;
+  }
+
+  document.getElementById('buyer-dec-text').textContent =
+    `Selected ${winner.winner_merchant_name} at ₹${winner.final_price} — ${winner.reason}`;
+  document.getElementById('buyer-dec').classList.add('on');
+  await delay(700);
+
+  quotes.forEach((q, i) => {
+    const card = document.getElementById(`mc${i}`);
+    if (!card) return;
+    if (q.merchant_name === winner.winner_merchant_name) {
+      card.classList.add('winner');
+      document.getElementById(`mq${i}`).classList.add('winner-price');
+      document.getElementById(`ms${i}`).textContent = '🏆 Winner';
+      card.innerHTML += '<div class="merch-crown">👑</div>';
+    } else {
+      card.classList.add('loser');
+      document.getElementById(`ms${i}`).textContent = 'Not selected';
+    }
+  });
+
+  await delay(400);
+
+  // Winner banner
+  const saved = (listedPrice - data.final_price).toFixed(2);
+  document.getElementById('wb-name').textContent = `${winner.winner_merchant_name} wins`;
+  document.getElementById('wb-reason').textContent = winner.reason;
+  document.getElementById('wb-price').textContent = `₹${data.final_price}`;
+  document.getElementById('wb-saving').textContent = `Saved ₹${saved} vs listed ₹${listedPrice}`;
+  document.getElementById('winner-banner').classList.add('on');
+
+  // Quotes table
+  const sorted = [...quotes].sort((a, b) => a.quote - b.quote);
+  const medals = ['🥇', '🥈', '🥉'];
+  document.getElementById('quotes-body').innerHTML = sorted.map((q, i) => {
+    const isW = q.merchant_name === winner.winner_merchant_name;
+    return `<tr ${isW ? 'class="winner-row"' : ''}>
+      <td style="font-family:var(--display);font-weight:700">${medals[i] || '#'+(i+1)}</td>
+      <td style="font-weight:${isW?700:400}">${q.merchant_name} ${isW?'👑':''}</td>
+      <td><span class="price-cell" style="color:${isW?'var(--green)':'var(--ink)'}"">₹${q.quote?.toFixed(2)}</span></td>
+      <td style="color:var(--green);font-family:var(--display);font-weight:600">-₹${(listedPrice-q.quote).toFixed(0)}</td>
+      <td style="font-size:12px;color:var(--ink3)">${q.pitch||''}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('quotes-card').style.display = 'block';
+  document.getElementById('settle-card').style.display = 'block';
+
+  setPhase(2, 'Auction complete', `Winner: ${winner.winner_merchant_name} · ₹${data.final_price}`);
+  resetBtn();
+  toast(`Deal! ₹${data.final_price} — saved ₹${saved}`, 'success');
+}
+
+async function settle() {
+  if (!auctionResult) return;
+  const btn = document.getElementById('settle-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Processing UPI payment...';
+
+  try {
+    const r = await fetch(API + '/commerce/negotiate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        buyer_agent_id:    document.getElementById('f-agent').value.trim(),
+        agent_private_key: document.getElementById('f-key').value.trim().replace(/\\n/g, '\n'),
+        item:              auctionResult.item,
+        listed_price:      auctionResult.listed_price,
+        initial_offer:     auctionResult.final_price,
+        use_razorpay:      true
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) { toast(data.detail || 'Settlement failed', 'error'); btn.disabled = false; btn.innerHTML = '💳 Settle Payment via UPI'; return; }
+
+    const rc = data.razorpay_receipt || {};
+    const fields = [
+      ['Receipt ID',    rc.receipt_id || '—'],
+      ['Amount',        `₹${rc.amount_inr || data.final_price}`, 'large'],
+      ['Order ID',      rc.razorpay_order_id || '—'],
+      ['Payment ID',    rc.razorpay_payment_id || '—'],
+      ['UPI VPA',       rc.upi_vpa || upiVpa],
+      ['Status',        rc.status || 'captured', rc.status === 'captured' ? 'success' : ''],
+      ['Mode',          rc.razorpay_mode || 'mock'],
+      ['Settled At',    rc.settled_at ? rc.settled_at.split('T')[1].slice(0,8) : '—'],
+    ];
+    document.getElementById('receipt-grid').innerHTML = fields.map(([l,v,c]) =>
+      `<div class="receipt-field">
+        <div class="rf-label">${l}</div>
+        <div class="rf-value ${c||''}">${v}</div>
+      </div>`).join('');
+    document.getElementById('receipt').style.display = 'block';
+    btn.innerHTML = '✅ Payment Complete';
+    toast('Payment settled!', 'success');
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '💳 Settle Payment via UPI';
+  }
+}
+
+function setPhase(n, title, sub) {
+  document.getElementById('ph-num').textContent = `Phase ${n}`;
+  document.getElementById('ph-title').textContent = title;
+  document.getElementById('ph-sub').textContent = sub || '';
+}
+
+function resetBtn() {
+  const btn = document.getElementById('launch-btn');
+  btn.disabled = false;
+  btn.innerHTML = '⚡ Launch Auction';
+}
+
+function resetAll() {
+  auctionResult = null;
+  document.getElementById('arena').classList.remove('on');
+  document.getElementById('config-card').style.opacity = '1';
+  document.getElementById('config-card').style.pointerEvents = 'auto';
+  document.getElementById('winner-banner').classList.remove('on');
+  document.getElementById('buyer-dec').classList.remove('on');
+  document.getElementById('quotes-card').style.display = 'none';
+  document.getElementById('settle-card').style.display = 'none';
+  document.getElementById('receipt').style.display = 'none';
+  document.getElementById('settle-btn').disabled = false;
+  document.getElementById('settle-btn').innerHTML = '💳 Settle Payment via UPI';
+  resetBtn();
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function toast(msg, type='info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type + ' show';
+  setTimeout(() => t.className = 'toast ' + type, 3000);
+}
+</script>
+</body>
+</html>

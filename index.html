@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AgentPay — AI-Powered Payments</title>
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800&family=Rubik:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0f2456;--navy2:#1a3a7a;--navy3:#2952a3;--navy-light:#e8eef9;
+  --teal:#0891b2;--teal-bg:#ecfeff;
+  --ink:#111827;--ink2:#374151;--ink3:#6b7280;--ink4:#9ca3af;
+  --bg:#f4f6fb;--bg2:#ffffff;--bg3:#eef1f8;
+  --border:#dde3f0;--border2:#c8d0e8;
+  --green:#059669;--green-bg:#ecfdf5;--green-light:#d1fae5;
+  --red:#dc2626;--red-bg:#fef2f2;
+  --amber:#d97706;--amber-bg:#fffbeb;
+  --accent:#2563eb;--accent-bg:#eff6ff;
+  --display:'Cabinet Grotesk',sans-serif;
+  --body:'Rubik',sans-serif;
+  --radius:12px;--radius-sm:8px;
+  --shadow:0 1px 3px rgba(15,36,86,0.07),0 1px 2px rgba(15,36,86,0.05);
+  --shadow-md:0 4px 16px rgba(15,36,86,0.10);
+}
+body{font-family:var(--body);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6;min-height:100vh}
+
+/* ─── LAYOUT ─────────────────────────────────── */
+.shell{display:flex;min-height:100vh}
+
+/* ─── SIDEBAR ────────────────────────────────── */
+.sidebar{
+  width:236px;background:var(--navy);display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;bottom:0;z-index:100;
+}
+.brand{
+  padding:24px 20px;border-bottom:1px solid rgba(255,255,255,0.08);
+  display:flex;align-items:center;gap:12px;
+}
+.brand-icon{
+  width:40px;height:40px;background:rgba(255,255,255,0.12);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:20px;flex-shrink:0;
+}
+.brand-text .name{
+  font-family:var(--display);font-size:19px;font-weight:800;color:#fff;
+  letter-spacing:-0.3px;line-height:1;
+}
+.brand-text .name em{font-style:normal;color:#93c5fd}
+.brand-text .tag{font-size:10px;color:rgba(255,255,255,0.35);letter-spacing:0.4px;margin-top:2px}
+
+.nav{padding:16px 12px;flex:1}
+.nav-group-label{
+  font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  color:rgba(255,255,255,0.22);padding:0 10px;margin:14px 0 5px;
+}
+.nav-group-label:first-child{margin-top:0}
+.nav-item{
+  display:flex;align-items:center;gap:9px;padding:9px 10px;
+  border-radius:var(--radius-sm);cursor:pointer;color:rgba(255,255,255,0.5);
+  font-size:13px;font-weight:400;transition:all 0.15s;
+  margin-bottom:1px;border:none;background:none;
+  width:100%;text-align:left;font-family:var(--body);text-decoration:none;
+}
+.nav-item:hover{background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.85)}
+.nav-item.active{background:rgba(147,197,253,0.15);color:#93c5fd;font-weight:500}
+.nav-ico{
+  width:28px;height:28px;border-radius:7px;background:rgba(255,255,255,0.06);
+  display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;
+}
+.nav-item.active .nav-ico{background:rgba(147,197,253,0.2)}
+.nav-item.special{
+  background:rgba(37,99,235,0.2);color:#93c5fd;
+  border:1px solid rgba(147,197,253,0.15);margin-top:10px;
+}
+.nav-item.special:hover{background:rgba(37,99,235,0.3)}
+
+.sidebar-foot{
+  padding:14px 20px;border-top:1px solid rgba(255,255,255,0.07);
+}
+.online-pill{
+  display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);
+  border-radius:20px;padding:7px 12px;
+}
+.dot-live{
+  width:7px;height:7px;background:#4ade80;border-radius:50%;flex-shrink:0;
+  box-shadow:0 0 0 2px rgba(74,222,128,0.25);animation:live 2s infinite;
+}
+@keyframes live{0%,100%{box-shadow:0 0 0 2px rgba(74,222,128,0.25)}50%{box-shadow:0 0 0 5px rgba(74,222,128,0)}}
+.online-text{font-size:11px;color:rgba(255,255,255,0.35)}
+
+/* ─── MAIN ───────────────────────────────────── */
+.main{margin-left:236px;flex:1}
+
+/* ─── TOPBAR ─────────────────────────────────── */
+.topbar{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:0 28px;height:58px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:50;
+}
+.topbar-title{font-family:var(--display);font-size:16px;font-weight:700;color:var(--ink)}
+.topbar-sub{font-size:12px;color:var(--ink3);margin-top:1px}
+.topbar-right{display:flex;gap:10px;align-items:center}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;padding:8px 16px;
+  border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;
+  font-family:var(--body);transition:all 0.15s;border:none;
+}
+.btn-navy{background:var(--navy);color:#fff}
+.btn-navy:hover{background:var(--navy2)}
+.btn-navy:disabled{opacity:0.45;cursor:not-allowed}
+.btn-outline{background:var(--bg2);color:var(--ink2);border:1px solid var(--border)}
+.btn-outline:hover{background:var(--bg3)}
+
+/* ─── PAGE ───────────────────────────────────── */
+.page{padding:24px 28px;display:none;animation:fadeIn 0.2s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ─── STATS ──────────────────────────────────── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.stat{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:20px;box-shadow:var(--shadow);
+}
+.stat-ico{font-size:20px;margin-bottom:10px}
+.stat-lbl{font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:5px}
+.stat-val{font-family:var(--display);font-size:28px;font-weight:800;color:var(--ink);letter-spacing:-0.5px;line-height:1}
+.stat-val.v-navy{color:var(--navy2)}
+.stat-val.v-green{color:var(--green)}
+.stat-val.v-teal{color:var(--teal)}
+.stat-hint{font-size:11px;color:var(--ink4);margin-top:5px}
+
+/* ─── GRID LAYOUTS ───────────────────────────── */
+.g2{display:grid;grid-template-columns:3fr 2fr;gap:18px}
+.g2-equal{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+
+/* ─── CARD ───────────────────────────────────── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:18px}
+.card-head{
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.card-head-left{display:flex;align-items:center;gap:10px}
+.ch-ico{
+  width:30px;height:30px;border-radius:7px;display:flex;
+  align-items:center;justify-content:center;font-size:13px;
+}
+.ch-ico.navy{background:var(--navy-light);color:var(--navy2)}
+.ch-ico.green{background:var(--green-bg);color:var(--green)}
+.ch-ico.teal{background:var(--teal-bg);color:var(--teal)}
+.ch-ico.amber{background:var(--amber-bg);color:var(--amber)}
+.ch-title{font-family:var(--display);font-size:14px;font-weight:700;color:var(--ink)}
+.ch-sub{font-size:11px;color:var(--ink3);margin-top:1px}
+.chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:var(--bg3);color:var(--ink3)}
+.chip.blue{background:var(--accent-bg);color:var(--accent)}
+
+/* ─── TABLE ──────────────────────────────────── */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{
+  text-align:left;padding:10px 20px;font-size:10px;font-weight:700;
+  letter-spacing:0.8px;text-transform:uppercase;color:var(--ink3);
+  background:var(--bg3);border-bottom:1px solid var(--border);
+}
+.tbl td{padding:13px 20px;border-bottom:1px solid var(--border);font-size:13px;color:var(--ink2);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tbody tr{cursor:pointer;transition:background 0.1s}
+.tbl tbody tr:hover td{background:var(--bg3)}
+.td-id{font-family:var(--display);font-size:10px;color:var(--ink4);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-item{font-weight:600;color:var(--ink);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-price{font-family:var(--display);font-size:14px;font-weight:700;color:var(--ink)}
+.td-time{font-family:var(--display);font-size:11px;color:var(--ink4)}
+.saving-pill{display:inline-flex;align-items:center;background:var(--green-bg);color:var(--green);font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:5px}
+
+/* ─── BADGES ─────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.badge.settled{background:var(--green-bg);color:var(--green)}
+.badge.settled::before{background:var(--green)}
+.badge.rejected{background:var(--red-bg);color:var(--red)}
+.badge.rejected::before{background:var(--red)}
+.badge.pending,.badge.negotiating{background:var(--amber-bg);color:var(--amber)}
+.badge.pending::before,.badge.negotiating::before{background:var(--amber)}
+.badge.revoked{background:var(--bg3);color:var(--ink3)}
+.badge.revoked::before{background:var(--ink4)}
+
+/* ─── AUDIT FEED ─────────────────────────────── */
+.feed{max-height:340px;overflow-y:auto}
+.feed-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:12px 20px;border-bottom:1px solid var(--border);
+  transition:background 0.1s;
+}
+.feed-item:hover{background:var(--bg3)}
+.feed-item:last-child{border-bottom:none}
+.feed-time{font-family:var(--display);font-size:10px;color:var(--ink4);white-space:nowrap;padding-top:3px;min-width:52px}
+.feed-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.feed-dot.settled{background:var(--green)}
+.feed-dot.failed{background:var(--red)}
+.feed-dot.offer{background:var(--navy3)}
+.feed-dot.auction{background:var(--teal)}
+.feed-dot.default{background:var(--ink4)}
+.feed-body{}
+.feed-evt{font-size:12px;font-weight:600;color:var(--ink);font-family:var(--display)}
+.feed-tag{display:inline-block;font-size:10px;background:var(--bg3);color:var(--ink3);padding:1px 6px;border-radius:4px;margin-left:5px;font-weight:400}
+.feed-detail{font-size:11px;color:var(--ink3);margin-top:2px}
+
+/* ─── ROUNDS VIZ ─────────────────────────────── */
+.rounds-wrap{padding:20px}
+.rounds-legend{display:flex;gap:18px;margin-bottom:16px;font-size:12px;color:var(--ink3)}
+.l-dot{display:inline-block;width:10px;height:4px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.round-row{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.round-row:last-child{margin-bottom:0}
+.rnd-lbl{font-family:var(--display);font-size:11px;font-weight:700;color:var(--ink3);width:50px;flex-shrink:0}
+.rnd-track{flex:1;height:28px;background:var(--bg3);border-radius:6px;position:relative;overflow:hidden}
+.rnd-buyer{
+  position:absolute;left:0;top:0;bottom:0;
+  background:var(--navy-light);border-right:3px solid var(--navy3);
+  border-radius:6px 0 0 6px;
+  display:flex;align-items:center;justify-content:flex-end;padding-right:7px;
+  transition:width 0.7s cubic-bezier(0.4,0,0.2,1);
+}
+.rnd-merchant{
+  position:absolute;right:0;top:0;bottom:0;
+  background:#fff7ed;border-left:3px solid #f59e0b;
+  border-radius:0 6px 6px 0;
+  display:flex;align-items:center;padding-left:7px;
+  transition:width 0.7s cubic-bezier(0.4,0,0.2,1);
+}
+.rnd-lbl-b{font-family:var(--display);font-size:10px;font-weight:700;color:var(--navy3);white-space:nowrap}
+.rnd-lbl-m{font-family:var(--display);font-size:10px;font-weight:700;color:#d97706;white-space:nowrap}
+.rnd-outcome{width:80px;flex-shrink:0;text-align:right;font-size:11px;font-weight:600;font-family:var(--display)}
+.rounds-summary{
+  display:flex;gap:20px;padding:14px 20px;border-top:1px solid var(--border);
+  background:var(--bg3);flex-wrap:wrap;
+}
+.sum-item{font-size:13px;color:var(--ink2)}
+.sum-item strong{font-family:var(--display);font-weight:800}
+
+/* ─── SPEND TRACKER ──────────────────────────── */
+.spend-wrap{padding:20px}
+.spend-card{
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:16px;margin-bottom:12px;background:var(--bg2);transition:box-shadow 0.15s;
+}
+.spend-card:hover{box-shadow:var(--shadow-md)}
+.spend-card:last-child{margin-bottom:0}
+.spend-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.spend-id{font-size:10px;font-family:var(--display);color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.spend-txns{font-size:11px;color:var(--ink4);background:var(--bg3);padding:2px 8px;border-radius:20px;flex-shrink:0}
+.spend-amounts{display:flex;justify-content:space-between;margin-bottom:8px}
+.spend-today{font-size:13px;color:var(--ink2)}
+.spend-today strong{font-family:var(--display);font-size:18px;font-weight:800;color:var(--ink)}
+.spend-bar-track{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.spend-bar-fill{height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(0.4,0,0.2,1)}
+.fill-low{background:var(--green)}
+.fill-mid{background:var(--amber)}
+.fill-high{background:var(--red)}
+.spend-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--ink4);margin-top:5px}
+
+/* ─── DETAIL PANEL ───────────────────────────── */
+.detail-panel{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow-md);
+  margin-bottom:18px;overflow:hidden;
+}
+.detail-head{
+  padding:16px 20px;background:var(--navy);color:#fff;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.detail-head-title{font-family:var(--display);font-size:15px;font-weight:700}
+.detail-head-sub{font-size:11px;color:rgba(255,255,255,0.5);margin-top:2px}
+.revoke-btn{
+  padding:7px 14px;background:rgba(220,38,38,0.15);color:#fca5a5;
+  border:1px solid rgba(220,38,38,0.3);border-radius:var(--radius-sm);
+  font-size:11px;font-weight:600;cursor:pointer;font-family:var(--body);
+  transition:all 0.15s;
+}
+.revoke-btn:hover{background:var(--red);color:#fff}
+
+/* ─── EMPTY & LOADING ────────────────────────── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;color:var(--ink3);text-align:center}
+.empty-ico{font-size:36px;margin-bottom:12px;opacity:0.3}
+.empty-txt{font-size:13px;color:var(--ink3)}
+.empty-hint{font-size:12px;color:var(--ink4);margin-top:4px}
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;gap:10px;color:var(--ink3)}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--navy3);border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ─── TOAST ──────────────────────────────────── */
+.toast{
+  position:fixed;bottom:24px;right:24px;padding:12px 20px;
+  border-radius:var(--radius-sm);font-size:13px;box-shadow:var(--shadow-md);
+  z-index:999;transform:translateY(80px);opacity:0;transition:all 0.25s;
+  font-weight:500;
+}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.info{background:var(--navy);color:#fff}
+.toast.success{background:var(--green);color:#fff}
+.toast.error{background:var(--red);color:#fff}
+
+/* ─── SCROLLBAR ──────────────────────────────── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-icon">🤝</div>
+    <div class="brand-text">
+      <div class="name">Agent<em>Pay</em></div>
+      <div class="tag">AI · Negotiate · Settle</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="nav-group-label">Main</div>
+    <button class="nav-item active" onclick="navigate('overview')">
+      <span class="nav-ico">📊</span> Overview
+    </button>
+    <button class="nav-item" onclick="navigate('sessions')">
+      <span class="nav-ico">🔄</span> Sessions
+    </button>
+    <button class="nav-item" onclick="navigate('spend')">
+      <span class="nav-ico">💰</span> Spend Tracker
+    </button>
+    <button class="nav-item" onclick="navigate('audit')">
+      <span class="nav-ico">📋</span> Audit Log
+    </button>
+    <div class="nav-group-label">Tools</div>
+    <a href="auction.html" class="nav-item special">
+      <span class="nav-ico">⚡</span> Run Auction
+    </a>
+  </nav>
+  <div class="sidebar-foot">
+    <div class="online-pill">
+      <div class="dot-live"></div>
+      <span class="online-text">localhost:8000 · live</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══════════════════════════════════════════════════════════════ -->
+<main class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="top-title">Overview</div>
+      <div class="topbar-sub" id="top-sub">Real-time agent activity</div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-outline" onclick="refreshPage()" id="refresh-btn">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- ══ OVERVIEW PAGE ════════════════════════════════════════════════════ -->
+  <div class="page active" id="page-overview">
+
+    <div class="stats-row" id="ov-stats">
+      <div class="stat">
+        <div class="stat-ico">🤖</div>
+        <div class="stat-lbl">Total Sessions</div>
+        <div class="stat-val v-navy" id="s-total">—</div>
+        <div class="stat-hint">all negotiations + auctions</div>
+      </div>
+      <div class="stat">
+        <div class="stat-ico">✅</div>
+        <div class="stat-lbl">Deals Settled</div>
+        <div class="stat-val v-green" id="s-settled">—</div>
+        <div class="stat-hint">successful payments</div>
+      </div>
+      <div class="stat">
+        <div class="stat-ico">💸</div>
+        <div class="stat-lbl">Total Saved</div>
+        <div class="stat-val" id="s-saved">—</div>
+        <div class="stat-hint">vs listed price</div>
+      </div>
+      <div class="stat">
+        <div class="stat-ico">📈</div>
+        <div class="stat-lbl">Avg Deal</div>
+        <div class="stat-val v-teal" id="s-avg">—</div>
+        <div class="stat-hint">settled sessions</div>
+      </div>
+    </div>
+
+    <div class="g2">
+      <!-- Recent sessions -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="ch-ico navy">🔄</div>
+            <div>
+              <div class="ch-title">Recent Sessions</div>
+              <div class="ch-sub">Latest agent negotiations and auctions</div>
+            </div>
+          </div>
+          <span class="chip blue" id="ov-sess-count">0</span>
+        </div>
+        <div id="ov-sessions"><div class="loading"><div class="spinner"></div> Loading...</div></div>
+      </div>
+
+      <!-- Audit feed -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="ch-ico teal">📋</div>
+            <div>
+              <div class="ch-title">Live Feed</div>
+              <div class="ch-sub">Latest audit events</div>
+            </div>
+          </div>
+          <span class="chip" id="ov-audit-count">0 events</span>
+        </div>
+        <div class="feed" id="ov-audit"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ SESSIONS PAGE ════════════════════════════════════════════════════ -->
+  <div class="page" id="page-sessions">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-head-left">
+          <div class="ch-ico navy">🔄</div>
+          <div>
+            <div class="ch-title">All Sessions</div>
+            <div class="ch-sub">Click any row to see negotiation rounds and audit trail</div>
+          </div>
+        </div>
+        <span class="chip" id="sess-count">—</span>
+      </div>
+      <div id="sess-table"><div class="loading"><div class="spinner"></div> Loading sessions...</div></div>
+    </div>
+
+    <!-- Detail panel (hidden until row clicked) -->
+    <div id="detail-wrap" style="display:none">
+      <div class="detail-panel">
+        <div class="detail-head">
+          <div>
+            <div class="detail-head-title" id="det-item">—</div>
+            <div class="detail-head-sub" id="det-meta">—</div>
+          </div>
+          <button class="revoke-btn" id="revoke-btn" onclick="revokeSession()">✕ Revoke</button>
+        </div>
+        <div class="card-head" style="background:var(--bg3)">
+          <div class="card-head-left">
+            <div class="ch-ico navy">📊</div>
+            <div class="ch-title">Negotiation Rounds</div>
+          </div>
+        </div>
+        <div id="det-rounds"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="ch-ico teal">📋</div>
+            <div class="ch-title">Audit Trail</div>
+          </div>
+        </div>
+        <div class="feed" id="det-audit" style="max-height:280px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SPEND TRACKER PAGE ═══════════════════════════════════════════════ -->
+  <div class="page" id="page-spend">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-head-left">
+          <div class="ch-ico green">💰</div>
+          <div>
+            <div class="ch-title">Agent Spend Tracker</div>
+            <div class="ch-sub">Daily spend vs policy limits per agent</div>
+          </div>
+        </div>
+        <span class="chip" id="spend-date">—</span>
+      </div>
+      <div class="spend-wrap" id="spend-body">
+        <div class="loading"><div class="spinner"></div> Loading agents...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ AUDIT LOG PAGE ════════════════════════════════════════════════════ -->
+  <div class="page" id="page-audit">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-head-left">
+          <div class="ch-ico navy">📋</div>
+          <div>
+            <div class="ch-title">Complete Audit Log</div>
+            <div class="ch-sub">Every agent decision, offer, and payment — immutable</div>
+          </div>
+        </div>
+        <span class="chip blue" id="audit-total">—</span>
+      </div>
+      <div class="feed" id="audit-feed" style="max-height:calc(100vh - 220px)">
+        <div class="loading"><div class="spinner"></div> Loading audit log...</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:8000';
+let currentPage = 'overview';
+let selectedSessionId = null;
+let allSessions = [];
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+const pageTitles = {
+  overview: ['Overview', 'Real-time agent activity'],
+  sessions: ['Sessions', 'Click any row to expand details'],
+  spend:    ['Spend Tracker', 'Daily spend vs policy limits'],
+  audit:    ['Audit Log', 'Complete immutable event trail'],
+};
+
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + page + "'"))
+      n.classList.add('active');
+  });
+  currentPage = page;
+  const [t, s] = pageTitles[page] || ['', ''];
+  document.getElementById('top-title').textContent = t;
+  document.getElementById('top-sub').textContent = s;
+  loadPage(page);
+}
+
+function loadPage(page) {
+  if (page === 'overview') loadOverview();
+  else if (page === 'sessions') { reset('sess-table'); loadSessions(); }
+  else if (page === 'spend')    { reset('spend-body'); loadSpend(); }
+  else if (page === 'audit')    { reset('audit-feed'); loadAudit(); }
+}
+
+async function refreshPage() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true; btn.textContent = '↻ Refreshing...';
+  await loadPage(currentPage);
+  btn.disabled = false; btn.textContent = '↻ Refresh';
+  toast('Refreshed', 'success');
+}
+
+// ─── API ──────────────────────────────────────────────────────────────────────
+async function api(path) {
+  try {
+    const r = await fetch(API + path);
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch(e) {
+    toast('API error: ' + e.message, 'error');
+    return null;
+  }
+}
+
+// ─── OVERVIEW ─────────────────────────────────────────────────────────────────
+async function loadOverview() {
+  const sessions = await api('/commerce/sessions');
+  if (!sessions) return;
+  allSessions = sessions;
+
+  const settled = sessions.filter(s => s.status === 'settled');
+  const saved   = settled.reduce((a, s) => a + ((s.initial_price || 0) - (s.final_price || 0)), 0);
+  const avg     = settled.length ? settled.reduce((a, s) => a + (s.final_price || 0), 0) / settled.length : 0;
+
+  setText('s-total',   sessions.length);
+  setText('s-settled', settled.length);
+  setText('s-saved',   settled.length ? '₹' + saved.toFixed(0) : '—');
+  setText('s-avg',     settled.length ? '₹' + avg.toFixed(0)   : '—');
+  setText('ov-sess-count', sessions.length + ' total');
+
+  renderTable(sessions.slice(0, 8), 'ov-sessions', false);
+
+  // Load audit from latest session
+  if (sessions.length > 0) {
+    const d = await api('/commerce/session/' + sessions[0].session_id);
+    if (d) {
+      renderFeed(d.audit_log, 'ov-audit', false);
+      setText('ov-audit-count', d.audit_log.length + ' events');
+    }
+  } else {
+    empty('ov-audit', '📋', 'No events yet', 'Run a negotiation to see activity');
+  }
+}
+
+// ─── SESSIONS ─────────────────────────────────────────────────────────────────
+async function loadSessions() {
+  const sessions = await api('/commerce/sessions');
+  if (!sessions) return;
+  allSessions = sessions;
+  setText('sess-count', sessions.length + ' total');
+  if (sessions.length === 0) { empty('sess-table', '🔄', 'No sessions yet', 'Run a negotiation or auction to get started'); return; }
+  renderTable(sessions, 'sess-table', true);
+  document.getElementById('detail-wrap').style.display = 'none';
+}
+
+async function selectSession(id) {
+  selectedSessionId = id;
+  const d = await api('/commerce/session/' + id);
+  if (!d) return;
+
+  const s = d.session;
+  document.getElementById('detail-wrap').style.display = 'block';
+  document.getElementById('det-item').textContent = s.item;
+  document.getElementById('det-meta').textContent =
+    `Session ${s.id.slice(0,20)} · Status: ${s.status} · Listed: ₹${s.initial_price}${s.final_price ? ' · Final: ₹' + s.final_price : ''}`;
+
+  const revokeBtn = document.getElementById('revoke-btn');
+  revokeBtn.style.display = (s.status === 'settled' || s.status === 'revoked') ? 'none' : 'inline-flex';
+
+  renderRounds(s);
+  renderFeed(d.audit_log, 'det-audit', false);
+  document.getElementById('detail-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function revokeSession() {
+  if (!selectedSessionId || !confirm('Revoke this session? This cannot be undone.')) return;
+  try {
+    const r = await fetch(API + '/commerce/revoke/' + selectedSessionId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner_id: 'user:dashboard', reason: 'Revoked via dashboard' })
+    });
+    const d = await r.json();
+    if (r.ok) { toast('Session revoked', 'success'); loadSessions(); }
+    else toast(d.detail || 'Revoke failed', 'error');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ─── SPEND TRACKER ────────────────────────────────────────────────────────────
+async function loadSpend() {
+  const sessions = await api('/commerce/sessions');
+  if (!sessions || sessions.length === 0) {
+    empty('spend-body', '💰', 'No spend data', 'Register an agent and run a session first');
+    return;
+  }
+
+  const uniqueAgents = [...new Set(sessions.filter(s => s.buyer_agent_id).map(s => s.buyer_agent_id))];
+  if (uniqueAgents.length === 0) {
+    empty('spend-body', '💰', 'No agents found', 'buyer_agent_id missing from sessions — refresh backend');
+    return;
+  }
+
+  setText('spend-date', new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }));
+
+  let html = '';
+  for (const agentId of uniqueAgents.slice(0, 5)) {
+    try {
+      const sp = await api('/agents/' + agentId + '/spend');
+      if (!sp) continue;
+      const max4bar = Math.max(sp.all_time_spent * 0.5 || 100, sp.today_spent, 100);
+      const pct = Math.min((sp.today_spent / max4bar) * 100, 100);
+      const fillCls = pct < 40 ? 'fill-low' : pct < 70 ? 'fill-mid' : 'fill-high';
+      const shortId = agentId.replace('did:agent:', '');
+      html += `
+        <div class="spend-card">
+          <div class="spend-top">
+            <div class="spend-id" title="${agentId}">🤖 ${shortId}</div>
+            <span class="spend-txns">${sp.total_transactions} txns</span>
+          </div>
+          <div class="spend-amounts">
+            <div class="spend-today">Today <strong>₹${sp.today_spent.toFixed(2)}</strong></div>
+            <div style="font-size:12px;color:var(--ink3)">All time: ₹${sp.all_time_spent.toFixed(2)}</div>
+          </div>
+          <div class="spend-bar-track" style="margin-top:10px">
+            <div class="spend-bar-fill ${fillCls}" style="width:${Math.max(pct,3)}%"></div>
+          </div>
+          <div class="spend-foot">
+            <span>${pct < 40 ? '✅ Within limits' : pct < 70 ? '⚠️ Moderate spend' : '🔴 High spend'}</span>
+            <span>${sp.date}</span>
+          </div>
+        </div>`;
+    } catch(e) { console.warn('Spend load failed for', agentId, e); }
+  }
+
+  document.getElementById('spend-body').innerHTML = html ||
+    `<div class="empty"><div class="empty-ico">💰</div><div class="empty-txt">No spend data available</div></div>`;
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+async function loadAudit() {
+  const sessions = await api('/commerce/sessions');
+  if (!sessions || sessions.length === 0) {
+    empty('audit-feed', '📋', 'No audit events', 'Run a negotiation to generate events');
+    setText('audit-total', '0 events');
+    return;
+  }
+
+  let all = [];
+  setText('audit-total', 'Loading...');
+
+  for (const s of sessions.slice(0, 6)) {
+    try {
+      const d = await api('/commerce/session/' + s.session_id);
+      if (d && Array.isArray(d.audit_log)) {
+        all = all.concat(d.audit_log.map(l => ({ ...l, _item: s.item })));
+        setText('audit-total', all.length + ' events (loading...)');
+      }
+    } catch(e) { console.warn('audit load skip', s.session_id); }
+  }
+
+  all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  setText('audit-total', all.length + ' events');
+
+  if (all.length === 0) {
+    empty('audit-feed', '📋', 'No events found', '');
+    return;
+  }
+  renderFeed(all, 'audit-feed', true);
+}
+
+// ─── RENDER: TABLE ────────────────────────────────────────────────────────────
+function renderTable(sessions, id, clickable) {
+  if (!sessions || sessions.length === 0) {
+    empty(id, '🔄', 'No sessions yet', 'Run a negotiation or auction to get started');
+    return;
+  }
+  const rows = sessions.map(s => {
+    const saving = s.final_price && s.initial_price ? s.initial_price - s.final_price : 0;
+    const savingHtml = saving > 0 ? `<span class="saving-pill">-₹${saving.toFixed(0)}</span>` : '';
+    const onclick = clickable ? `onclick="selectSession('${s.session_id}')"` : '';
+    const isAuction = s.session_id.startsWith('auction_');
+    return `<tr ${onclick}>
+      <td><span class="td-id">${s.session_id}</span></td>
+      <td>
+        <span class="td-item">${s.item}</span>
+        ${isAuction ? '<span style="font-size:10px;color:var(--teal);margin-left:6px;font-weight:600">AUCTION</span>' : ''}
+      </td>
+      <td><span class="badge ${s.status}">${s.status}</span></td>
+      <td><span class="td-price">₹${(s.initial_price||0).toFixed(0)}</span></td>
+      <td>
+        <span class="td-price" style="color:${s.final_price?'var(--green)':'var(--ink4)'}">
+          ${s.final_price ? '₹'+s.final_price.toFixed(2) : '—'}
+        </span>${savingHtml}
+      </td>
+      <td><span class="td-time">${fmtTime(s.created_at)}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById(id).innerHTML = `
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>Session ID</th><th>Item</th><th>Status</th><th>Listed</th><th>Final / Saved</th><th>Time</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ─── RENDER: AUDIT FEED ───────────────────────────────────────────────────────
+function renderFeed(logs, id, showItem) {
+  if (!logs || logs.length === 0) {
+    empty(id, '📋', 'No events', '');
+    return;
+  }
+  const html = logs.map(log => {
+    const dotCls =
+      log.event.includes('settled') || log.event.includes('payment') ? 'settled' :
+      log.event.includes('fail') || log.event.includes('reject') || log.event.includes('revoke') ? 'failed' :
+      log.event.includes('auction') ? 'auction' :
+      log.event.includes('offer') || log.event.includes('counter') || log.event.includes('buyer') ? 'offer' : 'default';
+    const detail = auditDetail(log);
+    const itemTag = showItem && log._item ? `<span class="feed-tag">${log._item}</span>` : '';
+    return `
+      <div class="feed-item">
+        <div class="feed-time">${fmtTime(log.timestamp)}</div>
+        <div class="feed-dot ${dotCls}"></div>
+        <div class="feed-body">
+          <div class="feed-evt">${fmtEvent(log.event)}${itemTag}</div>
+          <div class="feed-detail">${detail}</div>
+        </div>
+      </div>`;
+  }).join('');
+  document.getElementById(id).innerHTML = html;
+}
+
+function fmtEvent(evt) {
+  const map = {
+    session_started: '🚀 Session Started',
+    offer_sent: '📤 Offer Sent',
+    merchant_counter: '🔄 Merchant Counter',
+    merchant_accept: '✅ Merchant Accepted',
+    merchant_reject: '❌ Merchant Rejected',
+    buyer_counter: '📤 Buyer Counter',
+    buyer_accept: '✅ Buyer Accepted',
+    buyer_exit: '🚪 Buyer Exited',
+    payment_settled: '💳 Payment Settled',
+    negotiation_failed: '❌ Negotiation Failed',
+    session_revoked: '🔒 Session Revoked',
+    auction_quotes_collected: '📊 Auction Quotes In',
+    auction_winner_selected: '🏆 Winner Selected',
+  };
+  return map[evt] || evt.replace(/_/g, ' ');
+}
+
+function auditDetail(log) {
+  const p = log.payload || {};
+  if (p.amount) return `₹${p.amount} ${p.currency || 'INR'}${p.txn_id ? ' · ' + p.txn_id.slice(0,14) : ''}`;
+  if (p.buyer_offer !== undefined) return `Buyer offered ₹${p.buyer_offer}`;
+  if (p.price && p.reason) return `₹${p.price} — ${p.reason}`;
+  if (p.winner) return `Winner: ${p.winner} at ₹${p.price}`;
+  if (p.quotes_count !== undefined) return `${p.quotes_count} quotes received`;
+  if (p.item) return p.item;
+  if (p.reason) return p.reason;
+  if (p.status) return p.status;
+  return '';
+}
+
+// ─── RENDER: ROUNDS VIZ ───────────────────────────────────────────────────────
+function renderRounds(session) {
+  const rounds = session.rounds || [];
+  if (!rounds.length) {
+    document.getElementById('det-rounds').innerHTML = '<div class="empty"><div class="empty-ico">📊</div><div class="empty-txt">No rounds data</div></div>';
+    return;
+  }
+
+  // Handle auction rounds
+  if (rounds[0] && rounds[0].type === 'auction') {
+    const r = rounds[0];
+    const quotes = r.quotes || [];
+    const winner = r.winner || {};
+    const sorted = [...quotes].sort((a, b) => a.quote - b.quote);
+    const rows = sorted.map((q, i) => {
+      const medals = ['🥇', '🥈', '🥉'];
+      const isW = q.merchant_name === winner.winner_merchant_name;
+      return `<tr ${isW ? 'style="background:var(--green-bg)"' : ''}>
+        <td>${medals[i] || '#' + (i+1)}</td>
+        <td style="font-weight:${isW?600:400}">${q.merchant_name} ${isW?'👑':''}</td>
+        <td style="font-family:var(--display);font-weight:700;color:${isW?'var(--green)':'var(--ink)'}"">₹${q.quote}</td>
+        <td style="color:var(--green);font-size:12px">-₹${((session.initial_price||0) - q.quote).toFixed(0)}</td>
+        <td style="font-size:12px;color:var(--ink3)">${q.pitch || ''}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('det-rounds').innerHTML = `
+      <div style="padding:16px 20px;font-size:13px;color:var(--ink3);background:var(--amber-bg);border-bottom:1px solid var(--border)">
+        ⚡ This was an <strong>auction</strong> — ${quotes.length} merchants competed simultaneously
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Rank</th><th>Merchant</th><th>Quote</th><th>Saved vs Listed</th><th>Pitch</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    return;
+  }
+
+  // Regular negotiation rounds
+  const allPrices = rounds.flatMap(r => [r.buyer_offer, r.merchant_price, r.buyer_counter_price].filter(Boolean));
+  if (!allPrices.length) return;
+  const minP = Math.min(...allPrices) * 0.92;
+  const maxP = (session.initial_price || Math.max(...allPrices)) * 1.05;
+  const range = maxP - minP || 1;
+
+  const legend = `
+    <div class="rounds-legend">
+      <span><span class="l-dot" style="background:var(--navy3)"></span>Buyer offer</span>
+      <span><span class="l-dot" style="background:#f59e0b"></span>Merchant counter</span>
+    </div>`;
+
+  const rowsHtml = rounds.map(r => {
+    const bp = ((r.buyer_offer - minP) / range) * 100;
+    const mp = r.merchant_price ? 100 - ((r.merchant_price - minP) / range) * 100 : 0;
+    const outcome =
+      r.buyer_counter_action === 'accept' ? { txt: '✓ Accepted', clr: 'var(--green)' } :
+      r.buyer_counter_action === 'exit'   ? { txt: '✗ Exited',   clr: 'var(--red)'   } :
+      r.merchant_action === 'accept'      ? { txt: '✓ Deal',     clr: 'var(--green)' } :
+      r.merchant_action === 'reject'      ? { txt: '✗ Rejected', clr: 'var(--red)'   } :
+      { txt: `→ ₹${r.buyer_counter_price || ''}`, clr: 'var(--ink3)' };
+
+    return `
+      <div class="round-row">
+        <div class="rnd-lbl">Round ${r.round}</div>
+        <div class="rnd-track">
+          <div class="rnd-buyer" style="width:${Math.max(bp,8)}%">
+            <span class="rnd-lbl-b">₹${r.buyer_offer}</span>
+          </div>
+          <div class="rnd-merchant" style="width:${Math.max(mp,8)}%">
+            <span class="rnd-lbl-m">₹${r.merchant_price||''}</span>
+          </div>
+        </div>
+        <div class="rnd-outcome" style="color:${outcome.clr}">${outcome.txt}</div>
+      </div>`;
+  }).join('');
+
+  const fp = session.final_price;
+  const summary = fp
+    ? `<div class="rounds-summary">
+        <div class="sum-item">Listed <strong>₹${session.initial_price}</strong></div>
+        <div class="sum-item">Settled <strong style="color:var(--green)">₹${fp}</strong></div>
+        <div class="sum-item">Saved <strong style="color:var(--navy2)">₹${(session.initial_price - fp).toFixed(2)}</strong></div>
+        <div class="sum-item">Rounds <strong>${rounds.length}</strong></div>
+      </div>`
+    : `<div class="rounds-summary" style="color:var(--red)">No deal reached after ${rounds.length} round(s)</div>`;
+
+  document.getElementById('det-rounds').innerHTML =
+    `<div class="rounds-wrap">${legend}${rowsHtml}</div>${summary}`;
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function fmtTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function reset(id) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+}
+
+function empty(id, ico, txt, hint) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = `<div class="empty">
+    <div class="empty-ico">${ico}</div>
+    <div class="empty-txt">${txt}</div>
+    ${hint ? `<div class="empty-hint">${hint}</div>` : ''}
+  </div>`;
+}
+
+function toast(msg, type='info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type + ' show';
+  setTimeout(() => { t.className = 'toast ' + type; }, 2800);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+loadOverview();
+setInterval(() => { if (currentPage === 'overview') loadOverview(); }, 20000);
+</script>
+</body>
+</html>

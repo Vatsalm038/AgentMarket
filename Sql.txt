@@ -1,0 +1,549 @@
+-- ============================================================
+-- AgentPay — Complete DB Queries Reference
+-- All queries used in the application + useful admin queries
+-- Run in DBeaver against agentdb
+-- ============================================================
+
+
+-- ============================================================
+-- SETUP QUERIES (run once)
+-- ============================================================
+
+-- Enable UUID generation
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Verify all tables exist
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+
+-- Verify indexes
+SELECT indexname, tablename
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename;
+
+
+-- ============================================================
+-- CORE TABLES (from original schema)
+-- ============================================================
+
+-- Agents table (one per user/merchant, auto-created on register)
+CREATE TABLE IF NOT EXISTS agents (
+    id          VARCHAR PRIMARY KEY,      -- did:agent:<32-char-hex>
+    role        VARCHAR NOT NULL,         -- user_agent or merchant_agent
+    public_key  TEXT NOT NULL,            -- RSA PEM public key
+    owner_id    VARCHAR NOT NULL,         -- user_xxx or merch_xxx
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- Spending policies (signed by human owner)
+CREATE TABLE IF NOT EXISTS spending_policies (
+    id               VARCHAR PRIMARY KEY DEFAULT 'pol_' || gen_random_uuid()::text,
+    agent_id         VARCHAR NOT NULL REFERENCES agents(id),
+    max_per_txn      FLOAT NOT NULL,
+    max_per_day      FLOAT NOT NULL,
+    currency         VARCHAR DEFAULT 'INR',
+    allow_auto_renew BOOLEAN DEFAULT FALSE,
+    categories       TEXT DEFAULT '*',
+    signature        TEXT NOT NULL,       -- base64 RSA signature
+    created_at       TIMESTAMP DEFAULT NOW()
+);
+
+-- Negotiation sessions
+CREATE TABLE IF NOT EXISTS negotiation_sessions (
+    id                VARCHAR PRIMARY KEY,
+    buyer_agent_id    VARCHAR NOT NULL,
+    merchant_agent_id VARCHAR NOT NULL,
+    item              VARCHAR NOT NULL,
+    initial_price     FLOAT NOT NULL,
+    final_price       FLOAT,
+    rounds            TEXT DEFAULT '[]',  -- JSON array
+    status            VARCHAR DEFAULT 'pending',
+    created_at        TIMESTAMP DEFAULT NOW(),
+    settled_at        TIMESTAMP
+);
+
+-- Audit log (APPEND ONLY — never update or delete)
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          VARCHAR PRIMARY KEY DEFAULT 'log_' || gen_random_uuid()::text,
+    session_id  VARCHAR NOT NULL,
+    agent_id    VARCHAR NOT NULL,
+    event       VARCHAR NOT NULL,
+    payload     TEXT NOT NULL,            -- JSON
+    timestamp   TIMESTAMP DEFAULT NOW()
+);
+
+
+-- ============================================================
+-- MARKETPLACE TABLES (from schema_additions.sql)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS users (
+    id            VARCHAR PRIMARY KEY DEFAULT 'user_' || gen_random_uuid()::text,
+    name          VARCHAR NOT NULL,
+    email         VARCHAR UNIQUE NOT NULL,
+    phone         VARCHAR UNIQUE,
+    password_hash VARCHAR NOT NULL,
+    agent_id      VARCHAR,
+    plan          VARCHAR DEFAULT 'free',
+    is_verified   BOOLEAN DEFAULT FALSE,
+    created_at    TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS merchant_users (
+    id              VARCHAR PRIMARY KEY DEFAULT 'merch_' || gen_random_uuid()::text,
+    business_name   VARCHAR NOT NULL,
+    owner_name      VARCHAR NOT NULL,
+    email           VARCHAR UNIQUE NOT NULL,
+    phone           VARCHAR UNIQUE NOT NULL,
+    password_hash   VARCHAR NOT NULL,
+    gst_number      VARCHAR,
+    category        VARCHAR NOT NULL,
+    city            VARCHAR NOT NULL,
+    pincode         VARCHAR NOT NULL,
+    max_delivery_km INTEGER DEFAULT 50,
+    agent_id        VARCHAR,
+    helpline_phone  VARCHAR,
+    helpline_email  VARCHAR,
+    is_verified     BOOLEAN DEFAULT FALSE,
+    plan            VARCHAR DEFAULT 'free',
+    created_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id            VARCHAR PRIMARY KEY DEFAULT 'prod_' || gen_random_uuid()::text,
+    merchant_id   VARCHAR NOT NULL REFERENCES merchant_users(id),
+    name          VARCHAR NOT NULL,
+    description   TEXT DEFAULT '',
+    category      VARCHAR NOT NULL,
+    photo_url     VARCHAR,
+    base_price    FLOAT NOT NULL,
+    min_price     FLOAT NOT NULL,
+    delivery_days INTEGER DEFAULT 3,
+    city          VARCHAR NOT NULL,
+    tags          TEXT DEFAULT '',
+    is_active     BOOLEAN DEFAULT TRUE,
+    created_at    TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS rfqs (
+    id                VARCHAR PRIMARY KEY DEFAULT 'rfq_' || gen_random_uuid()::text,
+    buyer_id          VARCHAR NOT NULL REFERENCES users(id),
+    intent_text       TEXT NOT NULL,
+    item_query        VARCHAR NOT NULL,
+    max_price         FLOAT NOT NULL,
+    max_delivery_days INTEGER DEFAULT 7,
+    buyer_city        VARCHAR,
+    status            VARCHAR DEFAULT 'open',
+    winning_quote_id  VARCHAR,
+    channel           VARCHAR DEFAULT 'web',
+    created_at        TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS merchant_quotes (
+    id            VARCHAR PRIMARY KEY DEFAULT 'quote_' || gen_random_uuid()::text,
+    rfq_id        VARCHAR NOT NULL REFERENCES rfqs(id),
+    merchant_id   VARCHAR NOT NULL REFERENCES merchant_users(id),
+    product_id    VARCHAR REFERENCES products(id),
+    product_name  VARCHAR NOT NULL,
+    quoted_price  FLOAT NOT NULL,
+    delivery_days INTEGER NOT NULL,
+    pitch         TEXT DEFAULT '',
+    round_number  INTEGER DEFAULT 1,
+    is_winner     BOOLEAN DEFAULT FALSE,
+    created_at    TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id                   VARCHAR PRIMARY KEY DEFAULT 'order_' || gen_random_uuid()::text,
+    rfq_id               VARCHAR REFERENCES rfqs(id),
+    buyer_id             VARCHAR NOT NULL REFERENCES users(id),
+    merchant_id          VARCHAR NOT NULL REFERENCES merchant_users(id),
+    product_id           VARCHAR REFERENCES products(id),
+    product_name         VARCHAR NOT NULL,
+    quantity             INTEGER DEFAULT 1,
+    final_price          FLOAT NOT NULL,
+    delivery_days        INTEGER NOT NULL,
+    razorpay_order_id    VARCHAR,
+    razorpay_payment_id  VARCHAR,
+    payment_status       VARCHAR DEFAULT 'pending',
+    status               VARCHAR DEFAULT 'confirmed',
+    delivery_address     TEXT,
+    estimated_delivery   DATE,
+    created_at           TIMESTAMP DEFAULT NOW(),
+    updated_at           TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS shipment_tracking (
+    id          VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    order_id    VARCHAR NOT NULL REFERENCES orders(id),
+    status      VARCHAR NOT NULL,
+    description TEXT NOT NULL,
+    location    VARCHAR,
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS helpline_tickets (
+    id              VARCHAR PRIMARY KEY DEFAULT 'ticket_' || gen_random_uuid()::text,
+    order_id        VARCHAR REFERENCES orders(id),
+    raised_by       VARCHAR NOT NULL,
+    raised_by_type  VARCHAR NOT NULL,
+    issue_type      VARCHAR NOT NULL,
+    description     TEXT NOT NULL,
+    status          VARCHAR DEFAULT 'open',
+    resolution      TEXT,
+    created_at      TIMESTAMP DEFAULT NOW(),
+    resolved_at     TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS llm_configs (
+    id                VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    owner_id          VARCHAR NOT NULL,
+    owner_type        VARCHAR NOT NULL,
+    provider          VARCHAR DEFAULT 'openai',
+    model             VARCHAR DEFAULT 'gpt-4o-mini',
+    api_key_enc       TEXT,
+    negotiation_style VARCHAR DEFAULT 'balanced',
+    is_active         BOOLEAN DEFAULT TRUE,
+    created_at        TIMESTAMP DEFAULT NOW(),
+    updated_at        TIMESTAMP DEFAULT NOW(),
+    UNIQUE(owner_id, owner_type)
+);
+
+
+-- ============================================================
+-- INDEXES
+-- ============================================================
+
+CREATE INDEX IF NOT EXISTS idx_agents_owner        ON agents(owner_id);
+CREATE INDEX IF NOT EXISTS idx_policies_agent      ON spending_policies(agent_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_buyer      ON negotiation_sessions(buyer_agent_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status     ON negotiation_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_audit_session       ON audit_log(session_id);
+CREATE INDEX IF NOT EXISTS idx_audit_agent         ON audit_log(agent_id);
+CREATE INDEX IF NOT EXISTS idx_audit_event         ON audit_log(event);
+CREATE INDEX IF NOT EXISTS idx_audit_time          ON audit_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_products_merchant   ON products(merchant_id);
+CREATE INDEX IF NOT EXISTS idx_products_active     ON products(is_active);
+CREATE INDEX IF NOT EXISTS idx_products_city       ON products(city);
+CREATE INDEX IF NOT EXISTS idx_orders_buyer        ON orders(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_merchant     ON orders(merchant_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status       ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_rfqs_buyer          ON rfqs(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_quotes_rfq          ON merchant_quotes(rfq_id);
+CREATE INDEX IF NOT EXISTS idx_tracking_order      ON shipment_tracking(order_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_order       ON helpline_tickets(order_id);
+
+
+-- ============================================================
+-- USEFUL ADMIN QUERIES
+-- ============================================================
+
+-- 1. Full order summary with merchant and buyer details
+SELECT
+    o.id           AS order_id,
+    o.product_name,
+    o.final_price,
+    o.status,
+    o.payment_status,
+    o.delivery_days,
+    o.estimated_delivery,
+    o.created_at,
+    u.name         AS buyer_name,
+    u.email        AS buyer_email,
+    u.phone        AS buyer_phone,
+    m.business_name AS merchant_name,
+    m.helpline_phone,
+    m.city         AS merchant_city
+FROM orders o
+JOIN users u          ON o.buyer_id = u.id
+JOIN merchant_users m ON o.merchant_id = m.id
+ORDER BY o.created_at DESC;
+
+
+-- 2. Merchant dashboard summary (revenue, orders, win rate)
+SELECT
+    m.id              AS merchant_id,
+    m.business_name,
+    m.city,
+    m.is_verified,
+    COUNT(DISTINCT o.id)                                        AS total_orders,
+    COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'delivered') AS delivered_orders,
+    COUNT(DISTINCT o.id) FILTER (WHERE o.payment_status = 'paid') AS paid_orders,
+    COALESCE(SUM(o.final_price) FILTER (WHERE o.payment_status = 'paid'), 0) AS total_revenue,
+    COUNT(DISTINCT p.id) FILTER (WHERE p.is_active)            AS active_products,
+    COUNT(DISTINCT q.id)                                        AS total_quotes,
+    COUNT(DISTINCT q.id) FILTER (WHERE q.is_winner)            AS won_quotes,
+    ROUND(
+        COUNT(DISTINCT q.id) FILTER (WHERE q.is_winner) * 100.0
+        / NULLIF(COUNT(DISTINCT q.id), 0), 1
+    ) AS win_rate_pct
+FROM merchant_users m
+LEFT JOIN orders o         ON o.merchant_id = m.id
+LEFT JOIN products p       ON p.merchant_id = m.id
+LEFT JOIN merchant_quotes q ON q.merchant_id = m.id
+GROUP BY m.id, m.business_name, m.city, m.is_verified
+ORDER BY total_revenue DESC;
+
+
+-- 3. All audit events for a specific agent (replace the agent_id)
+SELECT
+    al.timestamp,
+    al.event,
+    al.payload::text,
+    al.session_id
+FROM audit_log al
+WHERE al.agent_id = 'did:agent:your-agent-id-here'
+ORDER BY al.timestamp DESC
+LIMIT 100;
+
+
+-- 4. Daily spend per agent today
+SELECT
+    al.agent_id,
+    SUM((al.payload::json->>'amount')::float) AS today_spent,
+    COUNT(*)                                   AS transaction_count
+FROM audit_log al
+WHERE al.event = 'payment_settled'
+AND DATE(al.timestamp) = CURRENT_DATE
+GROUP BY al.agent_id;
+
+
+-- 5. Negotiation sessions with outcome stats
+SELECT
+    status,
+    COUNT(*)                         AS count,
+    AVG(final_price)                 AS avg_final_price,
+    AVG(initial_price)               AS avg_listed_price,
+    AVG(initial_price - final_price) AS avg_saved
+FROM negotiation_sessions
+GROUP BY status;
+
+
+-- 6. Products available for a given city and budget
+SELECT
+    p.id,
+    p.name,
+    p.category,
+    p.base_price,
+    p.min_price,
+    p.delivery_days,
+    m.business_name AS merchant,
+    m.is_verified
+FROM products p
+JOIN merchant_users m ON p.merchant_id = m.id
+WHERE p.is_active = TRUE
+AND LOWER(p.city) = LOWER('Mumbai')   -- change city
+AND p.min_price <= 800                 -- change budget
+AND p.delivery_days <= 3               -- change max days
+ORDER BY m.is_verified DESC, p.base_price ASC;
+
+
+-- 7. RFQ funnel — how many intents converted to orders
+SELECT
+    DATE(r.created_at) AS date,
+    COUNT(*)            AS total_rfqs,
+    COUNT(*) FILTER (WHERE r.status = 'settled') AS settled,
+    COUNT(*) FILTER (WHERE r.status = 'expired') AS expired,
+    COUNT(*) FILTER (WHERE r.status = 'cancelled') AS cancelled,
+    ROUND(
+        COUNT(*) FILTER (WHERE r.status = 'settled') * 100.0
+        / NULLIF(COUNT(*), 0), 1
+    ) AS conversion_pct
+FROM rfqs r
+GROUP BY DATE(r.created_at)
+ORDER BY date DESC;
+
+
+-- 8. Helpline ticket status overview
+SELECT
+    issue_type,
+    status,
+    COUNT(*) AS count,
+    AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/3600) AS avg_resolution_hours
+FROM helpline_tickets
+GROUP BY issue_type, status
+ORDER BY issue_type, status;
+
+
+-- 9. Quotes comparison per RFQ (see all bids for an order)
+SELECT
+    q.rfq_id,
+    r.intent_text,
+    r.max_price  AS buyer_budget,
+    q.product_name,
+    m.business_name AS merchant,
+    q.quoted_price,
+    q.delivery_days,
+    q.pitch,
+    q.is_winner
+FROM merchant_quotes q
+JOIN rfqs r           ON q.rfq_id = r.id
+JOIN merchant_users m ON q.merchant_id = m.id
+WHERE q.rfq_id = 'rfq_your-id-here'   -- replace with actual RFQ ID
+ORDER BY q.quoted_price ASC;
+
+
+-- 10. Agent spend policy check (what limits does an agent have)
+SELECT
+    a.id    AS agent_id,
+    a.role,
+    a.owner_id,
+    sp.max_per_txn,
+    sp.max_per_day,
+    sp.currency,
+    sp.categories,
+    sp.allow_auto_renew,
+    sp.created_at AS policy_created
+FROM agents a
+JOIN spending_policies sp ON sp.agent_id = a.id
+ORDER BY sp.created_at DESC;
+
+
+-- 11. Orders pending delivery (for merchant operations view)
+SELECT
+    o.id AS order_id,
+    o.product_name,
+    o.final_price,
+    o.status,
+    o.estimated_delivery,
+    u.name  AS buyer_name,
+    u.phone AS buyer_phone,
+    CURRENT_DATE - o.estimated_delivery AS days_overdue
+FROM orders o
+JOIN users u ON o.buyer_id = u.id
+WHERE o.status NOT IN ('delivered', 'cancelled', 'returned')
+AND o.merchant_id = 'merch_your-id-here'   -- replace
+ORDER BY o.estimated_delivery ASC;
+
+
+-- 12. Top merchants by revenue this month
+SELECT
+    m.business_name,
+    m.city,
+    COUNT(o.id)       AS orders_this_month,
+    SUM(o.final_price) AS revenue_this_month
+FROM merchant_users m
+JOIN orders o ON o.merchant_id = m.id
+WHERE DATE_TRUNC('month', o.created_at) = DATE_TRUNC('month', CURRENT_DATE)
+AND o.payment_status = 'paid'
+GROUP BY m.id, m.business_name, m.city
+ORDER BY revenue_this_month DESC
+LIMIT 10;
+
+
+-- 13. Full audit trail for an order (every event from intent to delivery)
+SELECT
+    'rfq'       AS source,
+    r.created_at AS event_time,
+    'intent_received' AS event,
+    r.intent_text AS detail
+FROM rfqs r WHERE r.id = (SELECT rfq_id FROM orders WHERE id = 'order_your-id')
+
+UNION ALL
+
+SELECT
+    'audit'     AS source,
+    al.timestamp AS event_time,
+    al.event,
+    al.payload::text AS detail
+FROM audit_log al
+WHERE al.session_id = (SELECT rfq_id FROM orders WHERE id = 'order_your-id')
+
+UNION ALL
+
+SELECT
+    'tracking'  AS source,
+    st.created_at AS event_time,
+    st.status,
+    st.description AS detail
+FROM shipment_tracking st
+WHERE st.order_id = 'order_your-id'
+
+ORDER BY event_time ASC;
+
+
+-- ============================================================
+-- SEED DATA (demo data for testing)
+-- ============================================================
+
+-- Demo merchant (password: demo1234)
+INSERT INTO merchant_users
+    (id, business_name, owner_name, email, phone, password_hash,
+     category, city, pincode, helpline_phone, helpline_email, is_verified, plan)
+VALUES
+    ('merch_demo1', 'Sharma Sportswear', 'Raju Sharma',
+     'sharma@demo.com', '9876543210',
+     '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TIde8zLcP.M/6e4R9I2Z8Y3ydBnO',
+     'sports', 'Mumbai', '400001',
+     '1800-123-4567', 'support@sharmasports.com', TRUE, 'business'),
+    ('merch_demo2', 'QuickFash India', 'Priya Mehta',
+     'priya@demo.com', '9876543211',
+     '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TIde8zLcP.M/6e4R9I2Z8Y3ydBnO',
+     'fashion', 'Mumbai', '400002',
+     '1800-234-5678', 'help@quickfash.com', TRUE, 'free')
+ON CONFLICT DO NOTHING;
+
+-- Demo products
+INSERT INTO products
+    (id, merchant_id, name, description, category,
+     base_price, min_price, delivery_days, city, tags)
+VALUES
+    ('prod_demo1', 'merch_demo1',
+     'Track Pant Dri-FIT Black M',
+     'Premium moisture-wicking track pant. Gym and running.',
+     'sports', 999.0, 699.0, 2, 'Mumbai',
+     'track pant,gym,running,sports,dri-fit,black'),
+    ('prod_demo2', 'merch_demo1',
+     'Running Shoes White Size 9',
+     'Lightweight cushioned sole. Daily workouts.',
+     'sports', 1499.0, 1099.0, 2, 'Mumbai',
+     'running shoes,white,sports,lightweight'),
+    ('prod_demo3', 'merch_demo2',
+     'Track Pant Slim Fit Navy Blue L',
+     'Slim fit cotton-polyester. Machine washable.',
+     'fashion', 850.0, 620.0, 3, 'Mumbai',
+     'track pant,navy,slim fit,fashion,casual')
+ON CONFLICT DO NOTHING;
+
+-- Demo user (password: demo1234)
+INSERT INTO users
+    (id, name, email, phone, password_hash, is_verified, plan)
+VALUES
+    ('user_demo1', 'Vatsal Mehta', 'vatsal@demo.com', '9988776655',
+     '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TIde8zLcP.M/6e4R9I2Z8Y3ydBnO',
+     TRUE, 'pro')
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- CLEANUP / RESET (use carefully in dev only)
+-- ============================================================
+
+-- Clear all orders and audit for fresh testing
+-- TRUNCATE shipment_tracking, helpline_tickets, orders,
+--          merchant_quotes, rfqs, audit_log,
+--          negotiation_sessions CASCADE;
+
+-- Remove a specific user and all their data
+-- DELETE FROM orders WHERE buyer_id = 'user_xxx';
+-- DELETE FROM rfqs WHERE buyer_id = 'user_xxx';
+-- DELETE FROM users WHERE id = 'user_xxx';
+
+-- Check table row counts
+SELECT
+    'agents'                AS tbl, COUNT(*) FROM agents UNION ALL
+SELECT 'spending_policies',         COUNT(*) FROM spending_policies UNION ALL
+SELECT 'negotiation_sessions',      COUNT(*) FROM negotiation_sessions UNION ALL
+SELECT 'audit_log',                 COUNT(*) FROM audit_log UNION ALL
+SELECT 'users',                     COUNT(*) FROM users UNION ALL
+SELECT 'merchant_users',            COUNT(*) FROM merchant_users UNION ALL
+SELECT 'products',                  COUNT(*) FROM products UNION ALL
+SELECT 'rfqs',                      COUNT(*) FROM rfqs UNION ALL
+SELECT 'merchant_quotes',           COUNT(*) FROM merchant_quotes UNION ALL
+SELECT 'orders',                    COUNT(*) FROM orders UNION ALL
+SELECT 'shipment_tracking',         COUNT(*) FROM shipment_tracking UNION ALL
+SELECT 'helpline_tickets',          COUNT(*) FROM helpline_tickets UNION ALL
+SELECT 'llm_configs',               COUNT(*) FROM llm_configs;
