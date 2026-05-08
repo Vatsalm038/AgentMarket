@@ -22,7 +22,7 @@ Total: ~50 hours over ~16 calendar days. Ship by end of Sunday W3.
 
 - [x] 1.1 Restructure repo (backend/, mcp-server/, frontend/, docs/, .claude/) — 30m
 - [x] 1.2 Schema migration: drop old, add merchants/products/merchant_agents/agent_skills/signed_receipts. Fix FK drift. — 60m (~75m actual; +idempotency_keys table, signed_payload columns, replay flat columns)
-- [ ] 1.3 RSA → Ed25519 in identity.py + settlement.py — 45m
+- [x] 1.3 RSA → Ed25519 in identity.py + settlement.py — 45m (tests green; merchant DID generator added per ADR-010)
 - [ ] 1.4 Fix policy_id linkage in receipts — 20m
 - [ ] 1.5 Add idempotency keys to settlement — 45m
 - [ ] 1.6 Seed 20 Mumbai merchants × ~40 products with realistic INR floor prices — 60m
