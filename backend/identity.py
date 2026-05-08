@@ -84,13 +84,18 @@ def verify_policy_signature(public_key_b64: str, policy: dict, signature_b64: st
         return False
 
 
-def create_agent_credential(agent_id: str, owner_id: str, policy: dict, signature: str) -> dict:
-    """Build the verifiable credential bundle the agent carries in every request."""
+def create_agent_credential(agent_id: str, owner_id: str, policy_id: str,
+                             policy: dict, signature: str) -> dict:
+    """Build the verifiable credential bundle the agent carries in every request.
+
+    policy_id is the spending_policies row id — receipts reference it as an FK
+    so verifiers can re-fetch the exact signed policy that authorized a txn."""
     return {
         "credential_type": "AgentSpendingDelegation",
         "version": "1.0",
         "agent_id": agent_id,
         "owner_id": owner_id,
+        "policy_id": policy_id,
         "issued_at": datetime.utcnow().isoformat(),
         "policy": policy,
         "owner_signature": signature,
@@ -140,7 +145,7 @@ if __name__ == "__main__":
     valid = verify_policy_signature(owner_public, policy, signature)
     print(f"Signature valid: {valid}")
 
-    credential = create_agent_credential(agent_id, owner_id, policy, signature)
+    credential = create_agent_credential(agent_id, owner_id, "pol_demo", policy, signature)
     print(f"Credential issued: {credential['credential_type']} v{credential['version']}")
 
     for amount, daily in [(300.0, 0.0), (600.0, 0.0), (300.0, 1800.0)]:

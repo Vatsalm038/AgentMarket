@@ -228,7 +228,7 @@ if __name__ == "__main__":
         "categories": "saas,tools"
     }
     sig = sign_policy(owner_priv, policy)
-    credential = create_agent_credential(agent_id, "user:demo", policy, sig)
+    credential = create_agent_credential(agent_id, "user:demo", "pol_demo", policy, sig)
 
     # Run a negotiation
     session = run_negotiation(

@@ -130,11 +130,13 @@ def test_credential_creation():
     }
 
     sig = sign_policy(private_b64, policy)
-    credential = create_agent_credential(agent_id, owner_id, policy, sig)
+    policy_id = f"pol_{uuid.uuid4().hex[:8]}"
+    credential = create_agent_credential(agent_id, owner_id, policy_id, policy, sig)
 
     assert credential["credential_type"] == "AgentSpendingDelegation"
     assert credential["agent_id"] == agent_id
     assert credential["owner_id"] == owner_id
+    assert credential["policy_id"] == policy_id
     assert credential["policy"]["max_per_txn"] == 800.0
 
 
@@ -150,8 +152,9 @@ def test_transaction_signature_round_trip():
         "agent_id": agent_id, "max_per_txn": 1000.0, "max_per_day": 5000.0,
         "currency": "INR", "allow_auto_renew": False, "categories": "*",
     }
+    policy_id = f"pol_{uuid.uuid4().hex[:8]}"
     credential = create_agent_credential(
-        agent_id, "user:test", policy, sign_policy(owner_priv, policy)
+        agent_id, "user:test", policy_id, policy, sign_policy(owner_priv, policy)
     )
     session = {
         "session_id": "sess_test", "item": "Test", "final_price": 499.0,
@@ -160,10 +163,42 @@ def test_transaction_signature_round_trip():
     assert len(base64.b64decode(txn["agent_signature"])) == 64
     assert verify_transaction_signature(agent_pub, txn) is True
 
+    # Receipt must commit to the policy row that authorized the spend (1.4).
+    assert txn["policy_id"] == policy_id
+
     # Tamper amount → verification must fail.
     tampered = dict(txn)
     tampered["amount"] = 1.0
     assert verify_transaction_signature(agent_pub, tampered) is False
+
+    # Tamper policy_id → verification must fail (signature commits to it).
+    tampered_pol = dict(txn)
+    tampered_pol["policy_id"] = "pol_attacker"
+    assert verify_transaction_signature(agent_pub, tampered_pol) is False
+
+
+def test_credential_policy_id_flows_into_receipt():
+    """1.4 regression: receipt's policy_id must come from the credential, not
+    fall back to agent_id (the prior placeholder bug)."""
+    from settlement import create_transaction
+
+    owner_priv, _ = generate_keypair()
+    agent_priv, _ = generate_keypair()
+    agent_id = generate_agent_id()
+    policy_id = f"pol_{uuid.uuid4().hex[:8]}"
+    policy = {
+        "agent_id": agent_id, "max_per_txn": 1000.0, "max_per_day": 5000.0,
+        "currency": "INR", "allow_auto_renew": False, "categories": "*",
+    }
+    credential = create_agent_credential(
+        agent_id, "user:test", policy_id, policy, sign_policy(owner_priv, policy)
+    )
+    session = {"session_id": "sess_link", "item": "X", "final_price": 100.0}
+    txn = create_transaction(session, credential, agent_priv)
+
+    assert txn["policy_id"] == policy_id
+    assert txn["policy_id"] != agent_id
+    assert txn["policy_id"] == credential["policy_id"]
 
 
 # ── Spend Validation Tests ──────────────────────────────────────────────────
@@ -181,7 +216,8 @@ def make_test_credential(max_per_txn=500.0, max_per_day=2000.0):
         "categories": "*"
     }
     sig = sign_policy(private_pem, policy)
-    return create_agent_credential(agent_id, "user:test", policy, sig)
+    policy_id = f"pol_{uuid.uuid4().hex[:8]}"
+    return create_agent_credential(agent_id, "user:test", policy_id, policy, sig)
 
 
 def test_valid_spend_allowed():

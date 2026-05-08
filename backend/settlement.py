@@ -24,8 +24,8 @@ def _canonical_bytes(payload: dict) -> bytes:
 
 def create_transaction(session: dict, credential: dict, agent_private_key_b64: str) -> dict:
     """Create a signed transaction receipt. The buyer agent signs with its
-    private key — non-repudiation. policy_id is a placeholder until 1.4 wires
-    receipts.policy_id to a real spending_policies row."""
+    private key — non-repudiation. The signature commits to policy_id so a
+    verifier can prove which spending_policies row authorized this spend."""
     txn_payload = {
         "txn_id": f"txn_{uuid.uuid4().hex[:16]}",
         "session_id": session["session_id"],
@@ -35,7 +35,7 @@ def create_transaction(session: dict, credential: dict, agent_private_key_b64: s
         "amount": session["final_price"],
         "currency": credential["policy"]["currency"],
         "settled_at": datetime.utcnow().isoformat(),
-        "policy_id": credential["agent_id"],  # 1.4: replace with real policy row id
+        "policy_id": credential["policy_id"],
     }
 
     private_raw = base64.b64decode(agent_private_key_b64)
@@ -162,7 +162,7 @@ if __name__ == "__main__":
         "categories": "saas,tools"
     }
     sig = sign_policy(owner_priv, policy)
-    credential = create_agent_credential(agent_id, "user:demo", policy, sig)
+    credential = create_agent_credential(agent_id, "user:demo", "pol_demo", policy, sig)
 
     session = run_negotiation(
         item="Dev Tools Subscription",

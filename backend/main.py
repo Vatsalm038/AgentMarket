@@ -112,7 +112,7 @@ async def load_agent_and_credential(agent_id: str, db: AsyncSession):
         "allow_auto_renew": sp.allow_auto_renew,
         "categories": sp.categories
     }
-    credential = create_agent_credential(agent_id, agent.owner_id, policy, sp.signature)
+    credential = create_agent_credential(agent_id, agent.owner_id, sp.id, policy, sp.signature)
     return agent, sp, credential
 
 
@@ -209,7 +209,7 @@ async def delegate_policy(req: DelegateRequest, db: AsyncSession = Depends(get_d
     db.add(sp)
     await db.commit()
 
-    credential = create_agent_credential(req.agent_id, agent.owner_id, policy, signature)
+    credential = create_agent_credential(req.agent_id, agent.owner_id, sp.id, policy, signature)
     return {"policy_id": sp.id, "credential": credential,
             "message": "Policy signed and stored. Agent is ready to transact."}
 
