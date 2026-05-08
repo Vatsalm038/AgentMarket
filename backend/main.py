@@ -4,33 +4,53 @@ Endpoints:
   POST /agents/register           — register a new agent
   POST /agents/delegate           — owner signs spending policy
   GET  /agents/{id}/spend         — get agent's daily spend summary
-  POST /commerce/negotiate        — run single negotiation session
-  POST /commerce/auction          — run multi-merchant auction
+  POST /commerce/negotiate        — run single negotiation session (Idempotency-Key required)
+  POST /commerce/auction          — run multi-merchant auction       (Idempotency-Key required)
   GET  /commerce/sessions         — list all sessions
   GET  /commerce/session/{id}     — session detail + audit log
   POST /commerce/revoke/{id}      — revoke/cancel a session
   GET  /health                    — health check
 """
 
-import uuid
+import base64
+import enum
+import hashlib
 import json
-from datetime import datetime
+import logging
+import uuid
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException
+from datetime import datetime, timedelta, timezone
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from database import init_db, get_db
-from models import Agent, SpendingPolicy, NegotiationSession, AuditLog, AgentRole, TxnStatus
-from identity import (generate_agent_id, generate_keypair, sign_policy,
-                      verify_policy_signature, create_agent_credential, validate_spend)
-from negotiation import run_negotiation
-from settlement import create_transaction, build_audit_log
-from spend_tracker import get_daily_spent, get_spend_summary
+logger = logging.getLogger(__name__)
+
 from auction import run_auction
+from database import get_db, init_db
+from identity import (create_agent_credential, generate_agent_id, generate_keypair,
+                      sign_policy, validate_spend, verify_policy_signature)
+from models import (Agent, AgentRole, AgentSkill, AuditLog, IdempotencyKey, Merchant,
+                    MerchantAgent, NegotiationSession, Product, SignedReceipt,
+                    SpendingPolicy, TxnStatus)
+from negotiation import run_negotiation
 from razorpay_settlement import settle_via_razorpay
+from settlement import _canonical_bytes, build_audit_log, create_transaction
+from spend_tracker import get_daily_spent, get_spend_summary
+
+
+# Placeholder merchant/product fixtures used until 1.6 seeds real data.
+# Sessions and receipts have NOT NULL FKs into merchant_agents/products; without
+# real seed rows those inserts would fail. These rows are deterministic so
+# repeated startups are idempotent.
+_PLACEHOLDER_MERCHANT_ID = "mer_placeholder"
+_PLACEHOLDER_SKILL_ID = "skl_placeholder"
+_PLACEHOLDER_MERCHANT_AGENT_ID = "did:merchant:placeholder000000000000000000000"
+_PLACEHOLDER_PRODUCT_ID = "prd_placeholder"
 
 
 @asynccontextmanager
@@ -38,11 +58,12 @@ async def lifespan(app: FastAPI):
     await init_db()
     yield
 
+
 app = FastAPI(
     title="Agentic Commerce Protocol",
     description="A2A negotiation, identity delegation, and payment settlement for AI agents",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -53,19 +74,23 @@ app.add_middleware(
 )
 
 
+# ── Pydantic models ─────────────────────────────────────────────────────────
+
 class RegisterAgentRequest(BaseModel):
     owner_id: str
     role: str = "user_agent"
 
+
 class DelegateRequest(BaseModel):
     agent_id: str
-    owner_private_key: str
-    owner_public_key: str
+    owner_private_key: str  # base64(raw 32-byte Ed25519 private key)
+    owner_public_key: str   # base64(raw 32-byte Ed25519 public key)
     max_per_txn: float
     max_per_day: float
     currency: str = "INR"
     allow_auto_renew: bool = False
     categories: str = "*"
+
 
 class NegotiateRequest(BaseModel):
     buyer_agent_id: str
@@ -74,6 +99,7 @@ class NegotiateRequest(BaseModel):
     listed_price: float
     initial_offer: float
     use_razorpay: bool = False
+
 
 class AuctionRequest(BaseModel):
     buyer_agent_id: str
@@ -84,9 +110,155 @@ class AuctionRequest(BaseModel):
     buyer_priorities: str = "lowest price"
     use_razorpay: bool = True
 
+
 class RevokeRequest(BaseModel):
     owner_id: str
     reason: str = "Revoked by owner"
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _payload_hash(body: BaseModel) -> str:
+    """SHA-256 of canonical JSON of a Pydantic body. Sort_keys + tight separators
+    make the digest order- and whitespace-independent so callers comparing the
+    same logical request always get the same hash."""
+    canonical = _canonical_bytes(body.model_dump())
+    return hashlib.sha256(canonical).hexdigest()
+
+
+async def _ensure_placeholder_fixtures(db: AsyncSession) -> tuple[str, str]:
+    """Ensure placeholder merchant/skill/merchant_agent/product rows exist so that
+    NegotiationSession and SignedReceipt FKs resolve. Returns (merchant_agent_id,
+    product_id). Will be replaced by real seed data in 1.6 and by matcher-driven
+    selection in 1.7.
+
+    Each insert uses ON CONFLICT DO NOTHING so concurrent callers can race the
+    "first time" path without one of them tripping a PK violation. This is a
+    stopgap until 1.6 seeds real fixtures at startup.
+    """
+    await db.execute(
+        pg_insert(Merchant.__table__).values(
+            id=_PLACEHOLDER_MERCHANT_ID, name="Placeholder Merchant",
+            address="-", city="Mumbai", pincode="400001", lat=19.0760, lng=72.8777,
+        ).on_conflict_do_nothing(index_elements=["id"])
+    )
+    await db.execute(
+        pg_insert(AgentSkill.__table__).values(
+            id=_PLACEHOLDER_SKILL_ID, name="placeholder",
+            description="Placeholder skill until 1.8 seeds real personas.",
+            system_prompt_template="You are a merchant.",
+        ).on_conflict_do_nothing(index_elements=["id"])
+    )
+    # Stub Ed25519 public key — 32 zero bytes is a valid octet length and
+    # satisfies the CHECK constraint. Real merchant keys arrive in 1.6.
+    await db.execute(
+        pg_insert(MerchantAgent.__table__).values(
+            id=_PLACEHOLDER_MERCHANT_AGENT_ID,
+            merchant_id=_PLACEHOLDER_MERCHANT_ID,
+            public_key=b"\x00" * 32,
+            skill_id=_PLACEHOLDER_SKILL_ID,
+        ).on_conflict_do_nothing(index_elements=["id"])
+    )
+    await db.execute(
+        pg_insert(Product.__table__).values(
+            id=_PLACEHOLDER_PRODUCT_ID, merchant_id=_PLACEHOLDER_MERCHANT_ID,
+            name="Placeholder Product", listed_price=1.00, floor_price=1.00,
+            category="placeholder",
+        ).on_conflict_do_nothing(index_elements=["id"])
+    )
+    await db.flush()
+    return _PLACEHOLDER_MERCHANT_AGENT_ID, _PLACEHOLDER_PRODUCT_ID
+
+
+class _IdempotencyDecision(str, enum.Enum):
+    MISS = "miss"
+    HIT_REPLAY = "hit_replay"
+    HIT_MISMATCH = "hit_mismatch"
+    HIT_PENDING = "hit_pending"
+
+
+def _idempotency_decide(stored: IdempotencyKey | None, incoming_hash: str) -> _IdempotencyDecision:
+    """Pure decision function so the four-branch logic is testable without a DB."""
+    if stored is None:
+        return _IdempotencyDecision.MISS
+    if stored.request_hash != incoming_hash:
+        return _IdempotencyDecision.HIT_MISMATCH
+    # NULL response_json is the in-flight sentinel — the column is nullable in
+    # the migration, so we use NULL rather than introducing a status column.
+    if stored.response_json is None:
+        return _IdempotencyDecision.HIT_PENDING
+    return _IdempotencyDecision.HIT_REPLAY
+
+
+async def _idempotency_claim(
+    db: AsyncSession, endpoint: str, key: str, request_hash: str
+) -> bool:
+    """Atomically reserve (endpoint, key) with NULL response_json as the pending
+    marker. Returns True if THIS caller claimed the row; False if a row already
+    exists (caller must SELECT and decide replay/mismatch/pending).
+
+    INSERT ... ON CONFLICT DO NOTHING is the atomic claim — two concurrent callers
+    cannot both succeed, so only one runs the negotiation."""
+    stmt = (
+        pg_insert(IdempotencyKey.__table__)
+        .values(
+            endpoint=endpoint, key=key, request_hash=request_hash,
+            response_json=None, status_code=None,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        )
+        .on_conflict_do_nothing(index_elements=["endpoint", "key"])
+    )
+    result = await db.execute(stmt)
+    return result.rowcount == 1
+
+
+async def _idempotency_replay_or_409(
+    db: AsyncSession, endpoint: str, key: str, request_hash: str,
+) -> dict:
+    """Read the existing row and translate its state to a response or HTTPException.
+    Caller has already failed to claim the key, so a row MUST exist."""
+    result = await db.execute(
+        select(IdempotencyKey).where(
+            IdempotencyKey.endpoint == endpoint, IdempotencyKey.key == key
+        )
+    )
+    row = result.scalar_one_or_none()
+    decision = _idempotency_decide(row, request_hash)
+
+    if decision is _IdempotencyDecision.HIT_REPLAY:
+        return row.response_json
+    if decision is _IdempotencyDecision.HIT_MISMATCH:
+        # Log a fingerprint of the key (not the full value) so abuse is observable
+        # without DB writes — audit_log.session_id is NOT NULL FK so we can't
+        # write there before a session exists.
+        logger.warning("idempotency_conflict endpoint=%s key=%s", endpoint, key[:12])
+        raise HTTPException(
+            status_code=422,
+            detail="Idempotency-Key reused with a different request body",
+        )
+    if decision is _IdempotencyDecision.HIT_PENDING:
+        # Another worker still running the same idempotent request — refusing to
+        # block or duplicate work is safer than serialising on a row lock.
+        raise HTTPException(
+            status_code=409,
+            detail="Idempotent request still in progress, retry shortly",
+        )
+    # MISS would mean the row vanished between INSERT-conflict and SELECT, which
+    # shouldn't happen within one transaction; treat as 409 to be safe.
+    raise HTTPException(status_code=409, detail="Idempotency state inconsistent, retry")
+
+
+async def _idempotency_finalize(
+    db: AsyncSession, endpoint: str, key: str,
+    response_body: dict, status_code: int = 200,
+) -> None:
+    """Write the real response into the previously-claimed pending row. Caller
+    commits afterwards so the work + the finalize land atomically."""
+    await db.execute(
+        update(IdempotencyKey)
+        .where(IdempotencyKey.endpoint == endpoint, IdempotencyKey.key == key)
+        .values(response_json=response_body, status_code=status_code)
+    )
 
 
 async def load_agent_and_credential(agent_id: str, db: AsyncSession):
@@ -97,66 +269,94 @@ async def load_agent_and_credential(agent_id: str, db: AsyncSession):
 
     pol_result = await db.execute(
         select(SpendingPolicy)
-        .where(SpendingPolicy.agent_id == agent_id)
+        .where(SpendingPolicy.agent_id == agent_id,
+               SpendingPolicy.revoked_at.is_(None))
         .order_by(SpendingPolicy.created_at.desc())
     )
-    sp = pol_result.scalar_one_or_none()
+    sp = pol_result.scalars().first()
     if not sp:
-        raise HTTPException(status_code=400, detail="No spending policy found for agent")
+        raise HTTPException(status_code=400, detail="No active spending policy for agent")
 
     policy = {
         "agent_id": sp.agent_id,
-        "max_per_txn": sp.max_per_txn,
-        "max_per_day": sp.max_per_day,
+        "max_per_txn": float(sp.max_per_txn),
+        "max_per_day": float(sp.max_per_day),
         "currency": sp.currency,
         "allow_auto_renew": sp.allow_auto_renew,
-        "categories": sp.categories
+        "categories": sp.categories,
     }
-    credential = create_agent_credential(agent_id, agent.owner_id, sp.id, policy, sp.signature)
+    signature_b64 = base64.b64encode(sp.signature).decode()
+    credential = create_agent_credential(
+        agent_id, agent.owner_id, sp.id, policy, signature_b64
+    )
     return agent, sp, credential
 
 
-async def save_session_and_audit(session: dict, credential: dict,
-                                  agent_private_key: str, db: AsyncSession,
-                                  use_razorpay: bool = False):
-    merchant_id = f"did:agent:merchant_{uuid.uuid4().hex[:8]}"
-
+async def save_session_and_audit(
+    session: dict, credential: dict, policy_id: str,
+    merchant_agent_id: str, product_id: str,
+    agent_private_key: str, db: AsyncSession,
+    use_razorpay: bool = False,
+):
+    settled = session["status"] == "settled"
     ns = NegotiationSession(
         id=session["session_id"],
         buyer_agent_id=credential["agent_id"],
-        merchant_agent_id=merchant_id,
+        merchant_agent_id=merchant_agent_id,
+        product_id=product_id,
+        policy_id=policy_id,
         item=session["item"],
-        initial_price=session["listed_price"],
+        listed_price=session["listed_price"],
         final_price=session.get("final_price"),
-        rounds=json.dumps(session.get("rounds", [])),
+        rounds=session.get("rounds", []),
         status=TxnStatus(session["status"]),
-        settled_at=datetime.utcnow() if session["status"] == "settled" else None
+        settled_at=datetime.now(timezone.utc) if settled else None,
     )
     db.add(ns)
     await db.flush()
 
-    transaction = True
-    razorpay_receipt = True
+    transaction = None
+    razorpay_receipt = None
 
-    if session["status"] == "settled":
-        transaction = create_transaction(session, credential, agent_private_key)
+    if settled:
+        transaction, signed_bytes = create_transaction(
+            session, credential, agent_private_key
+        )
         if use_razorpay:
             razorpay_receipt = settle_via_razorpay(session, credential)
 
+        signature_raw = base64.b64decode(transaction["agent_signature"])
+        # payload_json must be a JSON-safe dict; the in-memory transaction is.
+        db.add(SignedReceipt(
+            receipt_id=f"rcpt_{uuid.uuid4().hex[:16]}",
+            session_id=ns.id,
+            policy_id=policy_id,
+            buyer_agent_id=credential["agent_id"],
+            merchant_agent_id=merchant_agent_id,
+            amount_inr=transaction["amount"],
+            payload_json=transaction,
+            signed_payload=signed_bytes,
+            agent_signature=signature_raw,
+            razorpay_order_id=(razorpay_receipt or {}).get("razorpay_order_id"),
+            razorpay_payment_id=(razorpay_receipt or {}).get("razorpay_payment_id"),
+        ))
+
     logs = build_audit_log(session, transaction)
     for entry in logs:
-        al = AuditLog(
-            id=entry["log_id"],
+        db.add(AuditLog(
             session_id=session["session_id"],
             agent_id=credential["agent_id"],
             event=entry["event"],
-            payload=json.dumps(entry["payload"])
-        )
-        db.add(al)
+            payload=entry["payload"],
+        ))
 
-    await db.commit()
+    # No commit here — the outer endpoint commits once after _idempotency_finalize
+    # so the work and the idempotency UPDATE either both land or both roll back.
+    await db.flush()
     return transaction, razorpay_receipt, logs
 
+
+# ── Endpoints ───────────────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health():
@@ -166,17 +366,20 @@ async def health():
 @app.post("/agents/register")
 async def register_agent(req: RegisterAgentRequest, db: AsyncSession = Depends(get_db)):
     agent_id = generate_agent_id()
-    private_pem, public_pem = generate_keypair()
+    private_b64, public_b64 = generate_keypair()
     agent = Agent(
         id=agent_id, role=AgentRole(req.role),
-        public_key=public_pem, owner_id=req.owner_id
+        public_key=base64.b64decode(public_b64),
+        owner_id=req.owner_id,
     )
     db.add(agent)
     await db.commit()
     return {
-        "agent_id": agent_id, "public_key": public_pem,
-        "private_key": private_pem, "role": req.role,
-        "message": "Agent registered. Store private_key securely — not saved on server."
+        "agent_id": agent_id,
+        "public_key": public_b64,
+        "private_key": private_b64,
+        "role": req.role,
+        "message": "Agent registered. Store private_key securely — not saved on server.",
     }
 
 
@@ -190,26 +393,28 @@ async def delegate_policy(req: DelegateRequest, db: AsyncSession = Depends(get_d
     policy = {
         "agent_id": req.agent_id, "max_per_txn": req.max_per_txn,
         "max_per_day": req.max_per_day, "currency": req.currency,
-        "allow_auto_renew": req.allow_auto_renew, "categories": req.categories
+        "allow_auto_renew": req.allow_auto_renew, "categories": req.categories,
     }
 
-    private_key_clean = req.owner_private_key.replace("\\n", "\n").strip()
-    public_key_clean = req.owner_public_key.replace("\\n", "\n").strip()
-
-    signature = sign_policy(private_key_clean, policy)
-    if not verify_policy_signature(public_key_clean, policy, signature):
+    signature_b64 = sign_policy(req.owner_private_key, policy)
+    if not verify_policy_signature(req.owner_public_key, policy, signature_b64):
         raise HTTPException(status_code=400, detail="Policy signature verification failed")
 
+    signed_payload_bytes = _canonical_bytes(policy)
     sp = SpendingPolicy(
         id=f"pol_{uuid.uuid4().hex[:12]}", agent_id=req.agent_id,
         max_per_txn=req.max_per_txn, max_per_day=req.max_per_day,
         currency=req.currency, allow_auto_renew=req.allow_auto_renew,
-        categories=req.categories, signature=signature
+        categories=req.categories,
+        signed_payload=signed_payload_bytes,
+        signature=base64.b64decode(signature_b64),
     )
     db.add(sp)
     await db.commit()
 
-    credential = create_agent_credential(req.agent_id, agent.owner_id, sp.id, policy, signature)
+    credential = create_agent_credential(
+        req.agent_id, agent.owner_id, sp.id, policy, signature_b64
+    )
     return {"policy_id": sp.id, "credential": credential,
             "message": "Policy signed and stored. Agent is ready to transact."}
 
@@ -223,76 +428,123 @@ async def get_agent_spend(agent_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @app.post("/commerce/negotiate")
-async def negotiate(req: NegotiateRequest, db: AsyncSession = Depends(get_db)):
-    agent, sp, credential = await load_agent_and_credential(req.buyer_agent_id, db)
-    daily_spent = await get_daily_spent(req.buyer_agent_id, db)
+async def negotiate(
+    req: NegotiateRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8),
+):
+    endpoint = "/commerce/negotiate"
+    request_hash = _payload_hash(req)
 
-    allowed, reason = validate_spend(credential, req.initial_offer, daily_spent)
-    if not allowed:
-        raise HTTPException(status_code=400, detail=f"Policy check failed: {reason}")
+    claimed = await _idempotency_claim(db, endpoint, idempotency_key, request_hash)
+    if not claimed:
+        cached = await _idempotency_replay_or_409(db, endpoint, idempotency_key, request_hash)
+        response.headers["Idempotent-Replay"] = "true"
+        return cached
 
-    session = run_negotiation(
-        item=req.item, listed_price=req.listed_price,
-        initial_offer=req.initial_offer, credential=credential,
-        daily_spent=daily_spent
-    )
+    try:
+        agent, sp, credential = await load_agent_and_credential(req.buyer_agent_id, db)
+        daily_spent = await get_daily_spent(req.buyer_agent_id, db)
 
-    transaction, razorpay_receipt, logs = await save_session_and_audit(
-        session, credential, req.agent_private_key, db, req.use_razorpay
-    )
+        allowed, reason = validate_spend(credential, req.initial_offer, daily_spent)
+        if not allowed:
+            raise HTTPException(status_code=400, detail=f"Policy check failed: {reason}")
 
-    return {
-        "session_id": session["session_id"],
-        "status": session["status"],
-        "item": req.item,
-        "listed_price": req.listed_price,
-        "final_price": session.get("final_price"),
-        "rounds_count": len(session.get("rounds", [])),
-        "transaction": transaction,
-        "razorpay_receipt": razorpay_receipt,
-        "audit_entries": len(logs),
-        "daily_spent_after": daily_spent + (session.get("final_price") or 0)
-    }
+        merchant_agent_id, product_id = await _ensure_placeholder_fixtures(db)
+
+        session = run_negotiation(
+            item=req.item, listed_price=req.listed_price,
+            initial_offer=req.initial_offer, credential=credential,
+            daily_spent=daily_spent,
+        )
+
+        transaction, razorpay_receipt, logs = await save_session_and_audit(
+            session, credential, sp.id, merchant_agent_id, product_id,
+            req.agent_private_key, db, req.use_razorpay,
+        )
+
+        body = {
+            "session_id": session["session_id"],
+            "status": session["status"],
+            "item": req.item,
+            "listed_price": req.listed_price,
+            "final_price": session.get("final_price"),
+            "rounds_count": len(session.get("rounds", [])),
+            "transaction": transaction,
+            "razorpay_receipt": razorpay_receipt,
+            "audit_entries": len(logs),
+            "daily_spent_after": daily_spent + (session.get("final_price") or 0),
+        }
+        await _idempotency_finalize(db, endpoint, idempotency_key, body)
+        await db.commit()
+        return body
+    except Exception:
+        # Roll back so the pending claim disappears — caller can retry cleanly.
+        await db.rollback()
+        raise
 
 
 @app.post("/commerce/auction")
-async def auction(req: AuctionRequest, db: AsyncSession = Depends(get_db)):
+async def auction(
+    req: AuctionRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8),
+):
     """Multi-merchant auction — multiple merchants compete, buyer picks best price."""
-    agent, sp, credential = await load_agent_and_credential(req.buyer_agent_id, db)
-    daily_spent = await get_daily_spent(req.buyer_agent_id, db)
+    endpoint = "/commerce/auction"
+    request_hash = _payload_hash(req)
 
-    allowed, reason = validate_spend(credential, 1.0, daily_spent)
-    if not allowed:
-        raise HTTPException(status_code=400, detail=f"Daily limit reached: {reason}")
+    claimed = await _idempotency_claim(db, endpoint, idempotency_key, request_hash)
+    if not claimed:
+        cached = await _idempotency_replay_or_409(db, endpoint, idempotency_key, request_hash)
+        response.headers["Idempotent-Replay"] = "true"
+        return cached
 
-    result = run_auction(
-        item=req.item, listed_price=req.listed_price,
-        credential=credential, num_merchants=req.num_merchants,
-        buyer_priorities=req.buyer_priorities
-    )
+    try:
+        agent, sp, credential = await load_agent_and_credential(req.buyer_agent_id, db)
+        daily_spent = await get_daily_spent(req.buyer_agent_id, db)
 
-    if result["status"] == "settled":
-        session_dict = {
-            "session_id": result["auction_id"],
-            "item": req.item,
-            "listed_price": req.listed_price,
-            "initial_offer": result["final_price"],
-            "final_price": result["final_price"],
-            "rounds": [{"round": 1, "type": "auction",
-                        "quotes": result["all_quotes"],
-                        "winner": result["winner"],
-                        "timestamp": result["created_at"]}],
-            "status": "settled",
-            "buyer_agent_id": req.buyer_agent_id
-        }
-        transaction, razorpay_receipt, logs = await save_session_and_audit(
-            session_dict, credential, req.agent_private_key, db, req.use_razorpay
+        allowed, reason = validate_spend(credential, 1.0, daily_spent)
+        if not allowed:
+            raise HTTPException(status_code=400, detail=f"Daily limit reached: {reason}")
+
+        result = run_auction(
+            item=req.item, listed_price=req.listed_price,
+            credential=credential, num_merchants=req.num_merchants,
+            buyer_priorities=req.buyer_priorities,
         )
-        result["transaction"] = transaction
-        result["razorpay_receipt"] = razorpay_receipt
-        result["audit_entries"] = len(logs)
 
-    return result
+        if result["status"] == "settled":
+            merchant_agent_id, product_id = await _ensure_placeholder_fixtures(db)
+            session_dict = {
+                "session_id": result["auction_id"],
+                "item": req.item,
+                "listed_price": req.listed_price,
+                "initial_offer": result["final_price"],
+                "final_price": result["final_price"],
+                "rounds": [{"round": 1, "type": "auction",
+                            "quotes": result["all_quotes"],
+                            "winner": result["winner"],
+                            "timestamp": result["created_at"]}],
+                "status": "settled",
+                "buyer_agent_id": req.buyer_agent_id,
+            }
+            transaction, razorpay_receipt, logs = await save_session_and_audit(
+                session_dict, credential, sp.id, merchant_agent_id, product_id,
+                req.agent_private_key, db, req.use_razorpay,
+            )
+            result["transaction"] = transaction
+            result["razorpay_receipt"] = razorpay_receipt
+            result["audit_entries"] = len(logs)
+
+        await _idempotency_finalize(db, endpoint, idempotency_key, result)
+        await db.commit()
+        return result
+    except Exception:
+        await db.rollback()
+        raise
 
 
 @app.get("/commerce/sessions")
@@ -301,10 +553,11 @@ async def list_sessions(db: AsyncSession = Depends(get_db)):
         select(NegotiationSession).order_by(NegotiationSession.created_at.desc())
     )
     sessions = result.scalars().all()
-    return [{"session_id": s.id, "item": s.item, "status": s.status,
-            "initial_price": s.initial_price, "final_price": s.final_price,
-            "buyer_agent_id": s.buyer_agent_id,
-            "created_at": s.created_at.isoformat()} for s in sessions]
+    return [{"session_id": s.id, "item": s.item, "status": s.status.value,
+             "listed_price": float(s.listed_price),
+             "final_price": float(s.final_price) if s.final_price is not None else None,
+             "buyer_agent_id": s.buyer_agent_id,
+             "created_at": s.created_at.isoformat()} for s in sessions]
 
 
 @app.get("/commerce/session/{session_id}")
@@ -324,20 +577,21 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
 
     return {
         "session": {
-            "id": session.id, "item": session.item, "status": session.status,
-            "initial_price": session.initial_price, "final_price": session.final_price,
-            "rounds": json.loads(session.rounds),
+            "id": session.id, "item": session.item, "status": session.status.value,
+            "listed_price": float(session.listed_price),
+            "final_price": float(session.final_price) if session.final_price is not None else None,
+            "rounds": session.rounds,
             "created_at": session.created_at.isoformat(),
-            "settled_at": session.settled_at.isoformat() if session.settled_at else None
+            "settled_at": session.settled_at.isoformat() if session.settled_at else None,
         },
-        "audit_log": [{"event": l.event, "payload": json.loads(l.payload),
-                       "timestamp": l.timestamp.isoformat()} for l in logs]
+        "audit_log": [{"event": l.event, "payload": l.payload,
+                       "timestamp": l.timestamp.isoformat()} for l in logs],
     }
 
 
 @app.post("/commerce/revoke/{session_id}")
 async def revoke_session(session_id: str, req: RevokeRequest,
-                          db: AsyncSession = Depends(get_db)):
+                         db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(NegotiationSession).where(NegotiationSession.id == session_id)
     )
@@ -349,9 +603,9 @@ async def revoke_session(session_id: str, req: RevokeRequest,
 
     session.status = TxnStatus.REVOKED
     db.add(AuditLog(
-        id=f"log_{uuid.uuid4().hex[:8]}", session_id=session_id,
+        session_id=session_id,
         agent_id=session.buyer_agent_id, event="session_revoked",
-        payload=json.dumps({"owner_id": req.owner_id, "reason": req.reason})
+        payload={"owner_id": req.owner_id, "reason": req.reason},
     ))
     await db.commit()
     return {"session_id": session_id, "status": "revoked", "reason": req.reason}

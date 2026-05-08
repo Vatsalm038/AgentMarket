@@ -159,7 +159,8 @@ def test_transaction_signature_round_trip():
     session = {
         "session_id": "sess_test", "item": "Test", "final_price": 499.0,
     }
-    txn = create_transaction(session, credential, agent_priv)
+    txn, signed_bytes = create_transaction(session, credential, agent_priv)
+    assert isinstance(signed_bytes, bytes)
     assert len(base64.b64decode(txn["agent_signature"])) == 64
     assert verify_transaction_signature(agent_pub, txn) is True
 
@@ -175,6 +176,33 @@ def test_transaction_signature_round_trip():
     tampered_pol = dict(txn)
     tampered_pol["policy_id"] = "pol_attacker"
     assert verify_transaction_signature(agent_pub, tampered_pol) is False
+
+
+def test_signed_bytes_round_trip_via_persisted_payload():
+    """The bytes we'd write to signed_receipts.signed_payload must verify against
+    the agent's public key — proves persistence layer can't drift from sign-time
+    canonicalization."""
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from settlement import create_transaction
+
+    owner_priv, _ = generate_keypair()
+    agent_priv, agent_pub = generate_keypair()
+    agent_id = generate_agent_id()
+    policy = {
+        "agent_id": agent_id, "max_per_txn": 1000.0, "max_per_day": 5000.0,
+        "currency": "INR", "allow_auto_renew": False, "categories": "*",
+    }
+    policy_id = f"pol_{uuid.uuid4().hex[:8]}"
+    credential = create_agent_credential(
+        agent_id, "user:test", policy_id, policy, sign_policy(owner_priv, policy)
+    )
+    session = {"session_id": "sess_persist", "item": "X", "final_price": 250.0}
+    txn, signed_bytes = create_transaction(session, credential, agent_priv)
+
+    pub_raw = base64.b64decode(agent_pub)
+    sig_raw = base64.b64decode(txn["agent_signature"])
+    pk = ed25519.Ed25519PublicKey.from_public_bytes(pub_raw)
+    pk.verify(sig_raw, signed_bytes)  # raises if invalid
 
 
 def test_credential_policy_id_flows_into_receipt():
@@ -194,11 +222,89 @@ def test_credential_policy_id_flows_into_receipt():
         agent_id, "user:test", policy_id, policy, sign_policy(owner_priv, policy)
     )
     session = {"session_id": "sess_link", "item": "X", "final_price": 100.0}
-    txn = create_transaction(session, credential, agent_priv)
+    txn, _signed = create_transaction(session, credential, agent_priv)
 
     assert txn["policy_id"] == policy_id
     assert txn["policy_id"] != agent_id
     assert txn["policy_id"] == credential["policy_id"]
+
+
+# ── Idempotency payload-hash helper ─────────────────────────────────────────
+
+def test_payload_hash_is_deterministic():
+    from main import _payload_hash, NegotiateRequest
+
+    a = NegotiateRequest(buyer_agent_id="did:agent:abc", agent_private_key="k",
+                         item="Tea", listed_price=100.0, initial_offer=50.0)
+    b = NegotiateRequest(buyer_agent_id="did:agent:abc", agent_private_key="k",
+                         item="Tea", listed_price=100.0, initial_offer=50.0)
+    assert _payload_hash(a) == _payload_hash(b)
+
+
+def test_payload_hash_is_value_sensitive():
+    from main import _payload_hash, NegotiateRequest
+
+    a = NegotiateRequest(buyer_agent_id="did:agent:abc", agent_private_key="k",
+                         item="Tea", listed_price=100.0, initial_offer=50.0)
+    b = NegotiateRequest(buyer_agent_id="did:agent:abc", agent_private_key="k",
+                         item="Tea", listed_price=100.0, initial_offer=51.0)
+    assert _payload_hash(a) != _payload_hash(b)
+
+
+def test_idempotency_decide_miss():
+    from main import _idempotency_decide, _IdempotencyDecision
+    assert _idempotency_decide(None, "h") is _IdempotencyDecision.MISS
+
+
+def test_idempotency_decide_replay():
+    from main import _idempotency_decide, _IdempotencyDecision
+    from models import IdempotencyKey
+
+    row = IdempotencyKey(
+        endpoint="/x", key="k", request_hash="h",
+        response_json={"ok": 1}, status_code=200,
+        expires_at=None,
+    )
+    assert _idempotency_decide(row, "h") is _IdempotencyDecision.HIT_REPLAY
+
+
+def test_idempotency_decide_mismatch():
+    from main import _idempotency_decide, _IdempotencyDecision
+    from models import IdempotencyKey
+
+    row = IdempotencyKey(
+        endpoint="/x", key="k", request_hash="h_old",
+        response_json={"ok": 1}, status_code=200,
+        expires_at=None,
+    )
+    assert _idempotency_decide(row, "h_new") is _IdempotencyDecision.HIT_MISMATCH
+
+
+def test_idempotency_decide_pending():
+    """NULL response_json is the in-flight sentinel — hash matches, body is missing."""
+    from main import _idempotency_decide, _IdempotencyDecision
+    from models import IdempotencyKey
+
+    row = IdempotencyKey(
+        endpoint="/x", key="k", request_hash="h",
+        response_json=None, status_code=None,
+        expires_at=None,
+    )
+    assert _idempotency_decide(row, "h") is _IdempotencyDecision.HIT_PENDING
+
+
+def test_payload_hash_is_field_order_independent():
+    """Pydantic field declaration order doesn't affect canonical-JSON hash —
+    canonicalization sorts keys, so two equivalent dicts must hash identically."""
+    from main import _payload_hash, NegotiateRequest
+
+    a = NegotiateRequest(buyer_agent_id="did:agent:abc", agent_private_key="k",
+                         item="Tea", listed_price=100.0, initial_offer=50.0)
+    # Build with kwargs in different order — should still produce identical
+    # canonical JSON because sort_keys=True normalises ordering.
+    b = NegotiateRequest(initial_offer=50.0, listed_price=100.0, item="Tea",
+                         agent_private_key="k", buyer_agent_id="did:agent:abc")
+    assert _payload_hash(a) == _payload_hash(b)
 
 
 # ── Spend Validation Tests ──────────────────────────────────────────────────

@@ -22,10 +22,17 @@ def _canonical_bytes(payload: dict) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
 
 
-def create_transaction(session: dict, credential: dict, agent_private_key_b64: str) -> dict:
+def create_transaction(
+    session: dict, credential: dict, agent_private_key_b64: str
+) -> tuple[dict, bytes]:
     """Create a signed transaction receipt. The buyer agent signs with its
     private key — non-repudiation. The signature commits to policy_id so a
-    verifier can prove which spending_policies row authorized this spend."""
+    verifier can prove which spending_policies row authorized this spend.
+
+    Returns (txn_payload_with_signature, signed_bytes). The caller persists
+    signed_bytes verbatim into signed_receipts.signed_payload — recomputing
+    canonical JSON from columns later would risk drift if any field encoding
+    changes."""
     txn_payload = {
         "txn_id": f"txn_{uuid.uuid4().hex[:16]}",
         "session_id": session["session_id"],
@@ -38,12 +45,13 @@ def create_transaction(session: dict, credential: dict, agent_private_key_b64: s
         "policy_id": credential["policy_id"],
     }
 
+    signed_bytes = _canonical_bytes(txn_payload)
     private_raw = base64.b64decode(agent_private_key_b64)
     private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_raw)
-    signature = private_key.sign(_canonical_bytes(txn_payload))
+    signature = private_key.sign(signed_bytes)
     txn_payload["agent_signature"] = base64.b64encode(signature).decode()
 
-    return txn_payload
+    return txn_payload, signed_bytes
 
 
 def build_audit_log(session: dict, transaction: dict | None) -> list[dict]:
@@ -173,7 +181,7 @@ if __name__ == "__main__":
 
     transaction = None
     if session["status"] == "settled":
-        transaction = create_transaction(session, credential, agent_priv)
+        transaction, _signed = create_transaction(session, credential, agent_priv)
 
     logs = build_audit_log(session, transaction)
     print_audit_report(logs, transaction)

@@ -6,9 +6,8 @@ Used by negotiate endpoint before allowing any new transaction.
 
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 from models import AuditLog
-import json
 
 
 async def get_daily_spent(agent_id: str, db: AsyncSession) -> float:
@@ -31,10 +30,11 @@ async def get_daily_spent(agent_id: str, db: AsyncSession) -> float:
 
     total = 0.0
     for log in logs:
+        # payload is JSONB; SQLAlchemy gives us the parsed dict directly.
+        payload = log.payload or {}
         try:
-            payload = json.loads(log.payload)
             total += float(payload.get("amount", 0))
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
     return total
@@ -64,15 +64,15 @@ async def get_spend_summary(agent_id: str, db: AsyncSession) -> dict:
     count = 0
 
     for log in all_logs:
+        payload = log.payload or {}
         try:
-            payload = json.loads(log.payload)
             amount = float(payload.get("amount", 0))
-            all_time_total += amount
-            count += 1
-            if log.timestamp >= today_start:
-                today_total += amount
-        except Exception:
-            pass
+        except (TypeError, ValueError):
+            continue
+        all_time_total += amount
+        count += 1
+        if log.timestamp >= today_start:
+            today_total += amount
 
     return {
         "agent_id": agent_id,
