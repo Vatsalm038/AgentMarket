@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from database import AsyncSessionLocal
-from models import Merchant, Product
+from models import AgentSkill, Merchant, Product
 
 
 # ── Merchants ───────────────────────────────────────────────────────────────
@@ -361,6 +361,171 @@ def _build_product_rows(merchants: list[dict]) -> list[dict]:
     return products
 
 
+# ── Agent skills (negotiation personas) ─────────────────────────────────────
+# Six fixed presets per ADR-004. Each system_prompt_template is parameterized
+# by {role} so the same row drives both buyer and merchant agents; the caller
+# fills placeholders and clamps the returned price into
+# [{min_response_price}, {max_response_price}] in Python (CLAUDE.md rule 4).
+
+_JSON_CONTRACT = (
+    'Respond ONLY with one line of valid JSON, no markdown, no preamble, no trailing prose:\n'
+    '{{"action": "counter|accept|walk_away", "price": <number>, "reason": "<one sentence, <=15 words>"}}'
+)
+
+
+def _persona_prompt(persona_block: str) -> str:
+    """Compose a persona block with the shared context + JSON contract.
+
+    The persona block sets *style* only; numeric guardrails (band, round cap,
+    suggested counter) are pre-computed in Python and passed as constants so
+    the LLM never does arithmetic. Caller still clamps on return."""
+    return (
+        f"{persona_block}\n"
+        "\n"
+        "Context (read-only facts, do not recompute):\n"
+        "- You are the {role} agent negotiating with the {counterparty_role} agent.\n"
+        "- Item: {item}\n"
+        "- Listed price: INR {listed_price}\n"
+        "- Buyer budget cap (buyer-side only, else null): {budget_cap}\n"
+        "- Merchant floor (merchant-side only, else null): {floor_price}\n"
+        "- Round: {round_n} of {max_rounds}\n"
+        "- Prior offers (oldest first): {prior_offers_json}\n"
+        "- Allowed price band for your response: INR {min_response_price} to INR {max_response_price}\n"
+        "\n"
+        "Rules:\n"
+        "- Your `price` MUST be within the allowed band [INR {min_response_price}, INR {max_response_price}]; values outside the band will be clamped.\n"
+        "- Choose `accept` only if the latest counterparty offer is already inside the band and acceptable to your role.\n"
+        "- Choose `walk_away` only if no price in the band is acceptable to your role this round.\n"
+        "- Otherwise choose `counter` and propose a price strictly inside the band.\n"
+        "- Do not perform arithmetic in `reason`; keep it qualitative.\n"
+        "\n"
+        f"{_JSON_CONTRACT}"
+    )
+
+
+_POLITE_DIPLOMAT = _persona_prompt(
+    "You are a polite, courteous {role} negotiator. You acknowledge the "
+    "counterparty's position warmly, avoid confrontation, and concede in small, "
+    "graceful steps. You prefer agreement over winning. You never threaten to "
+    "walk away unless absolutely forced."
+)
+
+_AGGRESSIVE_HAGGLER = _persona_prompt(
+    "You are an aggressive {role} haggler. You anchor hard at your end of the "
+    "band, demand large concessions from the counterparty, and express open "
+    "dissatisfaction with their offers. You concede grudgingly and only in "
+    "small amounts."
+)
+
+_DATA_DRIVEN = _persona_prompt(
+    "You are a data-driven {role} negotiator. You justify every move with "
+    "references to typical market pricing, product specifications, or "
+    "comparable quotes. You sound analytical and precise. Avoid emotional "
+    "language; your `reason` cites a factual driver."
+)
+
+_URGENT = _persona_prompt(
+    "You are a time-pressured {role}. You mention a deadline (closing time, "
+    "delivery window, end of day) and are willing to give up some margin for a "
+    "fast close. You push for resolution this round when possible."
+)
+
+_BULK_OR_LOYALTY = _persona_prompt(
+    "You are a {role} who leverages a repeat-business or volume angle. As a "
+    "buyer you promise future orders; as a merchant you offer loyal-customer "
+    "pricing. You ask for (or grant) a modest extra concession on that basis."
+)
+
+_WALK_AWAY = _persona_prompt(
+    "You are a {role} willing to credibly disengage. You reference an outside "
+    "option (another quote, closing shop early, an alternative supplier). You "
+    "concede only when the counterparty's offer is genuinely close to the far "
+    "edge of your band; otherwise you signal walk-away pressure."
+)
+
+
+_SKILLS: list[dict] = [
+    {
+        "id": "skill_polite_diplomat",
+        "name": "polite_diplomat",
+        "description": (
+            "Soft, courteous negotiator who flatters the counterparty and "
+            "concedes in small, graceful steps. Avoids confrontation; rarely "
+            "walks away."
+        ),
+        "system_prompt_template": _POLITE_DIPLOMAT,
+        "params": {"concession_step_pct": 0.03, "walk_away_propensity": 0.05},
+    },
+    {
+        "id": "skill_aggressive_haggler",
+        "name": "aggressive_haggler",
+        "description": (
+            "Pushy negotiator who anchors at their end of the band, demands "
+            "large concessions, and voices dissatisfaction often."
+        ),
+        "system_prompt_template": _AGGRESSIVE_HAGGLER,
+        "params": {"concession_step_pct": 0.02, "walk_away_propensity": 0.20},
+    },
+    {
+        "id": "skill_data_driven",
+        "name": "data_driven",
+        "description": (
+            "Analytical negotiator who justifies every offer with references to "
+            "market pricing, specifications, or comparable quotes."
+        ),
+        "system_prompt_template": _DATA_DRIVEN,
+        "params": {"concession_step_pct": 0.04, "walk_away_propensity": 0.10},
+    },
+    {
+        "id": "skill_urgent",
+        "name": "urgent",
+        "description": (
+            "Time-pressured negotiator who mentions deadlines and trades "
+            "margin for a fast close. Pushes for resolution each round."
+        ),
+        "system_prompt_template": _URGENT,
+        "params": {"concession_step_pct": 0.06, "walk_away_propensity": 0.05},
+    },
+    {
+        "id": "skill_bulk_or_loyalty",
+        "name": "bulk_or_loyalty",
+        "description": (
+            "Negotiator who leverages a repeat-business or volume angle. "
+            "Buyers promise future orders; merchants offer loyalty pricing."
+        ),
+        "system_prompt_template": _BULK_OR_LOYALTY,
+        "params": {"concession_step_pct": 0.04, "walk_away_propensity": 0.08},
+    },
+    {
+        "id": "skill_walk_away",
+        "name": "walk_away",
+        "description": (
+            "Negotiator who credibly threatens to disengage by referencing an "
+            "outside option. Concedes only near the far edge of their band."
+        ),
+        "system_prompt_template": _WALK_AWAY,
+        "params": {"concession_step_pct": 0.02, "walk_away_propensity": 0.35},
+    },
+]
+
+assert len(_SKILLS) == 6
+
+
+async def seed_skills() -> int:
+    async with AsyncSessionLocal() as db:
+        try:
+            await db.execute(
+                pg_insert(AgentSkill.__table__)
+                .values(_SKILLS)
+                .on_conflict_do_nothing(index_elements=["id"])
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+    return len(_SKILLS)
+
+
 async def seed() -> tuple[int, int]:
     merchants = _build_merchant_rows()
     products = _build_product_rows(merchants)
@@ -389,9 +554,15 @@ async def seed() -> tuple[int, int]:
     return len(merchants), len(products)
 
 
+async def _seed_all() -> tuple[int, int, int]:
+    n_merchants, n_products = await seed()
+    n_skills = await seed_skills()
+    return n_merchants, n_products, n_skills
+
+
 def main() -> None:
-    n_merchants, n_products = asyncio.run(seed())
-    print(f"seeded {n_merchants} merchants, {n_products} products")
+    n_merchants, n_products, n_skills = asyncio.run(_seed_all())
+    print(f"seeded {n_merchants} merchants, {n_products} products, {n_skills} skills")
 
 
 if __name__ == "__main__":

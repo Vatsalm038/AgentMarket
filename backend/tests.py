@@ -444,6 +444,34 @@ def test_make_price_pair_kirana_thinner_margin_than_clothing():
     assert avg_margin("kirana", 200) < avg_margin("clothing", 200)
 
 
+# ── Agent skills seed tests ─────────────────────────────────────────────────
+
+def test_agent_skills_seed_shape():
+    """All 6 personas must carry the math-clamp placeholders and the JSON
+    contract keyword — defense-in-depth for CLAUDE.md rule 4."""
+    from scripts.seed import _SKILLS
+
+    assert len(_SKILLS) == 6
+    ids = {s["id"] for s in _SKILLS}
+    assert len(ids) == 6  # IDs unique
+    names = {s["name"] for s in _SKILLS}
+    assert len(names) == 6  # names unique (matches DB unique constraint)
+
+    required_placeholders = (
+        "{role}", "{counterparty_role}", "{item}",
+        "{listed_price}", "{budget_cap}", "{floor_price}",
+        "{round_n}", "{max_rounds}", "{prior_offers_json}",
+        "{min_response_price}", "{max_response_price}",
+    )
+    for skill in _SKILLS:
+        tpl = skill["system_prompt_template"]
+        for ph in required_placeholders:
+            assert ph in tpl, (skill["id"], ph)
+        assert "JSON" in tpl or "json" in tpl, skill["id"]
+        # Markdown fences would defeat strict-JSON parsing in the caller.
+        assert "```" not in tpl, skill["id"]
+
+
 if __name__ == "__main__":
     # Run basic smoke test without pytest
     print("Running smoke tests...\n")
