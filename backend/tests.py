@@ -412,6 +412,38 @@ def test_razorpay_mock_settlement():
     assert receipt["status"] in ("captured", "mock_captured")
 
 
+# ── Seed price helper tests ─────────────────────────────────────────────────
+
+def test_make_price_pair_respects_floor_le_listed():
+    import random as _random
+    from scripts.seed import _make_price_pair, _MARGIN_RANGE
+
+    rng = _random.Random(42)
+    for category in _MARGIN_RANGE:
+        for base in (25, 99, 499, 2499):
+            listed, floor = _make_price_pair(base, category, rng)
+            assert listed > 0, (category, base, listed)
+            assert floor > 0, (category, base, floor)
+            assert floor <= listed, (category, base, listed, floor)
+
+
+def test_make_price_pair_kirana_thinner_margin_than_clothing():
+    import random as _random
+    from scripts.seed import _make_price_pair
+
+    # Average margin over many draws should reflect the category-specific bands
+    # (kirana 5-15% vs clothing 30-50%). One sample is noisy; average 200.
+    def avg_margin(category: str, base: float) -> float:
+        rng = _random.Random(7)
+        margins = []
+        for _ in range(200):
+            listed, floor = _make_price_pair(base, category, rng)
+            margins.append(1 - float(floor) / float(listed))
+        return sum(margins) / len(margins)
+
+    assert avg_margin("kirana", 200) < avg_margin("clothing", 200)
+
+
 if __name__ == "__main__":
     # Run basic smoke test without pytest
     print("Running smoke tests...\n")
