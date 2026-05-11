@@ -87,7 +87,12 @@ def build_audit_log(session: dict, transaction: dict | None) -> list[dict]:
                     "round": r["round"],
                     "winner": r["winner"].get("winner_merchant_name"),
                     "price": r["winner"].get("final_price"),
-                    "reason": r["winner"].get("reason")
+                    "reason": r["winner"].get("reason"),
+                    # winner_skill_id is the persona used by the winning merchant
+                    # agent. Persisted so 2.9 (verifiable replay) can re-load the
+                    # exact prompt template from agent_skills.
+                    "winner_skill_id": r["winner"].get("winner_skill_id"),
+                    "llm_seed": r["winner"].get("llm_seed"),
                 })
         else:
             if "buyer_offer" in r:

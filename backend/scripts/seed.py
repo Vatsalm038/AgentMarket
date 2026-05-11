@@ -10,6 +10,7 @@ Run from repo root with the venv:
 """
 
 import asyncio
+import hashlib
 import random
 import sys
 from decimal import ROUND_HALF_UP, Decimal
@@ -19,10 +20,12 @@ from pathlib import Path
 # the rest of the flat backend layout that tests.py and main.py already use.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from database import AsyncSessionLocal
-from models import AgentSkill, Merchant, Product
+from models import AgentSkill, Merchant, MerchantAgent, Product
 
 
 # ── Merchants ───────────────────────────────────────────────────────────────
@@ -511,6 +514,77 @@ _SKILLS: list[dict] = [
 assert len(_SKILLS) == 6
 
 
+# ── Merchant agents (seed-only deterministic keypairs) ─────────────────────
+#
+# IMPORTANT (seed-only pattern, do NOT use in production):
+# real merchant-agent registration goes through identity.generate_keypair(),
+# which uses ed25519.Ed25519PrivateKey.generate() (CSPRNG). Here we derive the
+# 32 bytes from a SHA-256 of a label so re-running the seed gives the same
+# DIDs/keys across machines and the demo is reproducible. This trick MUST NOT
+# leak into identity.py or any /register code path — anyone with the label
+# could recompute the private key.
+
+def _seed_merchant_agent_keypair(merchant_id: str) -> tuple[bytes, bytes]:
+    """Deterministic Ed25519 keypair for a seeded merchant_agent. Seed-only."""
+    seed = hashlib.sha256(f"seed-merchant-agent::{merchant_id}".encode()).digest()
+    priv = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
+    pub = priv.public_key()
+    priv_raw = priv.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    pub_raw = pub.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return priv_raw, pub_raw
+
+
+def _merchant_agent_id(merchant_id: str) -> str:
+    # Stable, human-readable ID so demo logs are legible. Real merchant_agents
+    # registered at runtime use generate_merchant_agent_id() (did:merchant:hex).
+    return f"mag_{merchant_id}"
+
+
+def _build_merchant_agent_rows(merchants: list[dict]) -> list[dict]:
+    """One merchant_agent per merchant; skill_id round-robins across the six
+    seeded personas so the auction sees stylistic variety.
+    """
+    skill_ids = [s["id"] for s in _SKILLS]
+    rows: list[dict] = []
+    for i, m in enumerate(merchants):
+        _priv, pub = _seed_merchant_agent_keypair(m["id"])
+        rows.append({
+            "id": _merchant_agent_id(m["id"]),
+            "merchant_id": m["id"],
+            "public_key": pub,  # 32 bytes — satisfies octet_length CHECK
+            "skill_id": skill_ids[i % len(skill_ids)],
+        })
+    return rows
+
+
+async def seed_merchant_agents() -> int:
+    """Seed one merchant_agent per seeded merchant. Idempotent.
+
+    Depends on merchants + agent_skills being seeded already.
+    """
+    merchants = _build_merchant_rows()
+    rows = _build_merchant_agent_rows(merchants)
+    async with AsyncSessionLocal() as db:
+        try:
+            await db.execute(
+                pg_insert(MerchantAgent.__table__)
+                .values(rows)
+                .on_conflict_do_nothing(index_elements=["id"])
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+    return len(rows)
+
+
 async def seed_skills() -> int:
     async with AsyncSessionLocal() as db:
         try:
@@ -554,15 +628,20 @@ async def seed() -> tuple[int, int]:
     return len(merchants), len(products)
 
 
-async def _seed_all() -> tuple[int, int, int]:
+async def _seed_all() -> tuple[int, int, int, int]:
     n_merchants, n_products = await seed()
+    # Skills must exist before merchant_agents (FK skill_id -> agent_skills.id).
     n_skills = await seed_skills()
-    return n_merchants, n_products, n_skills
+    n_magents = await seed_merchant_agents()
+    return n_merchants, n_products, n_skills, n_magents
 
 
 def main() -> None:
-    n_merchants, n_products, n_skills = asyncio.run(_seed_all())
-    print(f"seeded {n_merchants} merchants, {n_products} products, {n_skills} skills")
+    n_merchants, n_products, n_skills, n_magents = asyncio.run(_seed_all())
+    print(
+        f"seeded {n_merchants} merchants, {n_products} products, "
+        f"{n_skills} skills, {n_magents} merchant_agents"
+    )
 
 
 if __name__ == "__main__":

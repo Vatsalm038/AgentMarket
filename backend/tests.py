@@ -472,6 +472,245 @@ def test_agent_skills_seed_shape():
         assert "```" not in tpl, skill["id"]
 
 
+# ── Auction helpers + request shape (1.7) ───────────────────────────────────
+
+def test_auction_clamp_quote_inside_band():
+    """_clamp_quote must bound the LLM output to [floor, min(listed, budget)]
+    even if the model invents a price outside the band."""
+    from auction import _clamp_quote
+
+    # In-band stays put.
+    assert _clamp_quote(450.0, floor_price=400.0, listed_price=500.0, buyer_budget=600.0) == 450.0
+    # Below floor → floor.
+    assert _clamp_quote(100.0, floor_price=400.0, listed_price=500.0, buyer_budget=600.0) == 400.0
+    # Above listed → listed (since listed < budget).
+    assert _clamp_quote(999.0, floor_price=400.0, listed_price=500.0, buyer_budget=600.0) == 500.0
+    # Budget is the binding upper bound when budget < listed.
+    assert _clamp_quote(999.0, floor_price=400.0, listed_price=500.0, buyer_budget=450.0) == 450.0
+    # Budget below floor — degenerate: clamp pins to floor; outer policy check rejects.
+    assert _clamp_quote(300.0, floor_price=400.0, listed_price=500.0, buyer_budget=350.0) == 400.0
+
+
+def test_auction_request_shape_after_117():
+    """1.7 swaps AuctionRequest.item/listed_price for anchor_product_id. Free-text
+    item or listed_price on the request must now be a validation error."""
+    from pydantic import ValidationError
+    from main import AuctionRequest
+
+    # Happy path: anchor_product_id is required and sufficient.
+    req = AuctionRequest(
+        buyer_agent_id="did:agent:abc",
+        agent_private_key="k",
+        anchor_product_id="prod_merch_001_01",
+    )
+    assert req.anchor_product_id == "prod_merch_001_01"
+    assert req.num_merchants == 3  # default preserved
+
+    # Missing anchor_product_id must fail.
+    try:
+        AuctionRequest(buyer_agent_id="did:agent:abc", agent_private_key="k")
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("anchor_product_id should be required")
+
+
+def test_stable_seed_reproducible():
+    """Same inputs → same int; different inputs → different ints. Replay (2.9)
+    depends on this being deterministic."""
+    from auction import _stable_seed
+
+    s1 = _stable_seed("auction_abc", "merchant_1", "quote")
+    s2 = _stable_seed("auction_abc", "merchant_1", "quote")
+    assert s1 == s2
+
+    s3 = _stable_seed("auction_abc", "merchant_2", "quote")
+    assert s1 != s3
+
+    s4 = _stable_seed("auction_xyz", "merchant_1", "quote")
+    assert s1 != s4
+
+    # int63 positive range — must fit in BigInteger (replay_seed column).
+    assert 0 <= s1 < (1 << 63)
+
+
+def test_shortlist_dedup_on_duplicate_merchant_agent():
+    """If the same merchant_agent appears in multiple join rows (e.g. multiple
+    products), the dedup at line ~113 must drop subsequent occurrences. Pure
+    unit test using a mocked session.execute."""
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+    from auction import _shortlist_competitors
+
+    anchor = MagicMock()
+    anchor.id = "prd_1"
+    anchor.category = "kirana"
+
+    def make_row(product_id, magent_id):
+        p = MagicMock()
+        p.id = product_id
+        p.merchant_id = "mer_1"
+        p.name = f"Product {product_id}"
+        p.listed_price = 100
+        p.floor_price = 50
+        p.category = "kirana"
+        m = MagicMock()
+        m.id = "mer_1"
+        m.name = "Merchant 1"
+        a = MagicMock()
+        a.id = magent_id
+        s = MagicMock()
+        s.id = "skl_1"
+        s.name = "Skill 1"
+        s.system_prompt_template = "tpl"
+        return (p, m, a, s)
+
+    db = AsyncMock()
+    anchor_result = MagicMock()
+    anchor_result.scalar_one_or_none.return_value = anchor
+
+    shortlist_result = MagicMock()
+    # Same merchant_agent_id appears twice → second occurrence must be dropped.
+    shortlist_result.all.return_value = [
+        make_row("prd_1", "magent_1"),
+        make_row("prd_2", "magent_1"),
+        make_row("prd_3", "magent_2"),
+    ]
+    db.execute.side_effect = [anchor_result, shortlist_result]
+
+    rows = asyncio.run(_shortlist_competitors(db, "prd_1", policy_max=1000.0, num_merchants=5))
+    magent_ids = [r["merchant_agent_id"] for r in rows]
+    assert magent_ids.count("magent_1") == 1
+    assert "magent_2" in magent_ids
+
+
+def test_anchor_always_included_when_within_budget():
+    """The anchor must be force-prepended even if it's not in the top-N cheapest."""
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+    from auction import _shortlist_competitors
+
+    anchor = MagicMock()
+    anchor.id = "prd_anchor"
+    anchor.category = "kirana"
+
+    def make_row(product_id, floor_price, magent_id):
+        p = MagicMock()
+        p.id = product_id
+        p.name = f"Product {product_id}"
+        p.listed_price = 100
+        p.floor_price = floor_price
+        p.category = "kirana"
+        m = MagicMock()
+        m.id = f"mer_{magent_id}"
+        m.name = f"Merchant {magent_id}"
+        a = MagicMock()
+        a.id = magent_id
+        s = MagicMock()
+        s.id = "skl_1"
+        s.name = "Skill 1"
+        s.system_prompt_template = "tpl"
+        return (p, m, a, s)
+
+    db = AsyncMock()
+    anchor_result = MagicMock()
+    anchor_result.scalar_one_or_none.return_value = anchor
+
+    # First query: top-N by floor — anchor NOT in this set.
+    shortlist_result = MagicMock()
+    shortlist_result.all.return_value = [
+        make_row("prd_cheap1", 10, "magent_a"),
+        make_row("prd_cheap2", 20, "magent_b"),
+    ]
+    # Second query: anchor row fetched separately for force-include.
+    anchor_join_result = MagicMock()
+    anchor_join_result.first.return_value = make_row("prd_anchor", 80, "magent_anchor")
+
+    db.execute.side_effect = [anchor_result, shortlist_result, anchor_join_result]
+
+    rows = asyncio.run(_shortlist_competitors(db, "prd_anchor", policy_max=1000.0, num_merchants=2))
+    assert rows[0]["product_id"] == "prd_anchor", "anchor must be at index 0"
+    assert len(rows) <= 2  # cap respected
+
+
+def test_auction_anchor_unaffordable_returns_failure():
+    """If anchor's floor_price > policy_max, run_auction must short-circuit with
+    a clear failure dict and NEVER call the LLM. Verified by stubbing the DB
+    shortlist to return an unaffordable anchor row."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+    import auction as auction_mod
+
+    fake_shortlist = [{
+        "product_id": "prd_anchor",
+        "product_name": "Premium Widget",
+        "listed_price": 5000.0,
+        "floor_price": 1500.0,  # exceeds policy_max below
+        "category": "kirana",
+        "merchant_id": "mer_1",
+        "merchant_name": "Merchant 1",
+        "merchant_agent_id": "magent_1",
+        "skill_id": "skl_1",
+        "skill_name": "Skill",
+        "system_prompt_template": "tpl",
+    }]
+
+    credential = {
+        "agent_id": "did:agent:test",
+        "policy_id": "pol_test",
+        "policy": {"max_per_txn": 1000.0, "currency": "INR"},
+    }
+
+    async def fake_shortlist_competitors(*args, **kwargs):
+        return fake_shortlist
+
+    # Spy on the LLM helper to assert it's never called.
+    called = {"merchant_quote": 0, "buyer_eval": 0}
+
+    async def spy_merchant(*a, **kw):
+        called["merchant_quote"] += 1
+        return {}
+
+    async def spy_buyer(*a, **kw):
+        called["buyer_eval"] += 1
+        return {}
+
+    db = AsyncMock()
+    with patch.object(auction_mod, "_shortlist_competitors", fake_shortlist_competitors), \
+         patch.object(auction_mod, "_merchant_initial_quote", spy_merchant), \
+         patch.object(auction_mod, "_buyer_evaluate_quotes", spy_buyer):
+        result = asyncio.run(auction_mod.run_auction(db, "prd_anchor", credential))
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "anchor_unaffordable"
+    assert result["anchor_product_id"] == "prd_anchor"
+    assert result["anchor_floor_price"] == 1500.0
+    assert result["policy_max"] == 1000.0
+    assert called["merchant_quote"] == 0, "LLM merchant_quote must not be called"
+    assert called["buyer_eval"] == 0, "LLM buyer_eval must not be called"
+
+
+def test_transaction_amount_is_float_not_decimal():
+    """Regression guard: create_transaction must produce a float amount so the
+    receipt is JSON-serialisable. Decimal would silently break json.dumps."""
+    from settlement import create_transaction
+
+    owner_priv, _ = generate_keypair()
+    agent_priv, _ = generate_keypair()
+    agent_id = generate_agent_id()
+    policy = {
+        "agent_id": agent_id, "max_per_txn": 1000.0, "max_per_day": 5000.0,
+        "currency": "INR", "allow_auto_renew": False, "categories": "*",
+    }
+    policy_id = f"pol_{uuid.uuid4().hex[:8]}"
+    credential = create_agent_credential(
+        agent_id, "user:test", policy_id, policy, sign_policy(owner_priv, policy)
+    )
+    session = {"session_id": "sess_amount", "item": "X", "final_price": 250.0}
+    txn, _signed = create_transaction(session, credential, agent_priv)
+    assert isinstance(txn["amount"], float)
+
+
 if __name__ == "__main__":
     # Run basic smoke test without pytest
     print("Running smoke tests...\n")

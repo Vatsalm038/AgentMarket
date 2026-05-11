@@ -85,4 +85,32 @@ defence-in-depth.
 
 ---
 
+## ADR-011 | 2026-05-11 | Accepted
+**Decision:** Auction shortlists competitors via a simple SQL query
+(category + is_active + listed_price <= policy_max, ordered by floor_price ASC,
+LIMIT 3 *including* the anchor) keyed off an anchor `product_id`. Matcher
+(ticket 2.1) remains responsible for selecting the anchor; auction does not
+call the matcher.
+**Context:** 1.7 must move `auction.py` off hard-coded merchant names without
+duplicating matcher work that 2.1 will write. Auction's job is competitive
+quote collection, not buyer-intent resolution. Current signature
+`run_auction(item, listed_price, ...)` assumes the caller has already
+resolved a product but still passes free-text + price, which leaves the
+floor-price clamp guessing (`listed_price * 0.70`) instead of using the real
+seeded `floor_price`.
+**Consequences:** `run_auction` signature changes to
+`(session, anchor_product_id, credential, buyer_priorities, num_merchants=3)`
+and becomes `async`. The floor-price clamp now uses each row's seeded
+`floor_price` rather than a fixed 70% of listed. Each merchant_agent's
+bound `skill_id` (from 1.8) is used — never randomised, so replay stays
+deterministic. DB session is dependency-injected from the caller so the
+auction shares the caller's transaction (audit_log + negotiation_sessions
+write atomically). When 2.1 ships, the inline `_shortlist_competitors`
+helper is swapped for `matcher.shortlist_competitors()` in one line.
+**Follow-up:** add composite index on `products(category, is_active)`
+before the MVP demo; confirm `merchant_agents.merchant_id` is 1:1 (add a
+unique constraint if so) to prevent shortlist duplication on join.
+
+---
+
 _(append new ADRs below as decisions are made)_

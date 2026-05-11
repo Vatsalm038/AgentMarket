@@ -104,8 +104,7 @@ class NegotiateRequest(BaseModel):
 class AuctionRequest(BaseModel):
     buyer_agent_id: str
     agent_private_key: str
-    item: str
-    listed_price: float
+    anchor_product_id: str  # caller pre-resolves intent → product (matcher in 2.1)
     num_merchants: int = 3
     buyer_priorities: str = "lowest price"
     use_razorpay: bool = True
@@ -510,18 +509,22 @@ async def auction(
         if not allowed:
             raise HTTPException(status_code=400, detail=f"Daily limit reached: {reason}")
 
-        result = run_auction(
-            item=req.item, listed_price=req.listed_price,
-            credential=credential, num_merchants=req.num_merchants,
+        result = await run_auction(
+            db=db,
+            anchor_product_id=req.anchor_product_id,
+            credential=credential,
+            num_merchants=req.num_merchants,
             buyer_priorities=req.buyer_priorities,
         )
 
         if result["status"] == "settled":
-            merchant_agent_id, product_id = await _ensure_placeholder_fixtures(db)
+            # The auction selected concrete winner FKs — no placeholder fixtures.
+            merchant_agent_id = result["winner_merchant_agent_id"]
+            product_id = result["winner_product_id"]
             session_dict = {
                 "session_id": result["auction_id"],
-                "item": req.item,
-                "listed_price": req.listed_price,
+                "item": result["item"],
+                "listed_price": result["listed_price"],
                 "initial_offer": result["final_price"],
                 "final_price": result["final_price"],
                 "rounds": [{"round": 1, "type": "auction",
