@@ -46,10 +46,8 @@ docker compose up -d postgres
 alembic upgrade head  # or run migrations/ SQL files manually
 uvicorn app.api.main:app --reload --port 8000
 
-# MCP server
-cd mcp-server
-pip install -r requirements.txt
-python -m mcp_server  # serves on port 8001
+# MCP server (from repo root)
+python -m mcp_server.server  # serves on port 8001
 
 # Frontend
 cd frontend

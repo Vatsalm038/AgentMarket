@@ -19,7 +19,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -34,7 +33,17 @@ from models import AgentSkill, Merchant, MerchantAgent, Product
 
 logger = logging.getLogger(__name__)
 
-_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Lazy-init so importing this module doesn't require OPENAI_API_KEY at boot.
+_client: AsyncOpenAI | None = None
+
+
+def _get_openai_client() -> AsyncOpenAI:
+    global _client
+    if _client is None:
+        _client = AsyncOpenAI()
+    return _client
+
+
 _LLM_MODEL = "gpt-4o-mini"
 
 
@@ -198,7 +207,7 @@ async def _merchant_initial_quote(
     )
 
     seed = _stable_seed(auction_id, competitor["merchant_agent_id"], "quote")
-    response = await _client.chat.completions.create(
+    response = await _get_openai_client().chat.completions.create(
         model=_LLM_MODEL,
         max_tokens=200,
         temperature=0,
@@ -252,7 +261,7 @@ async def _buyer_evaluate_quotes(
     )
 
     seed = _stable_seed(auction_id, "buyer_eval")
-    response = await _client.chat.completions.create(
+    response = await _get_openai_client().chat.completions.create(
         model=_LLM_MODEL,
         max_tokens=300,
         temperature=0,

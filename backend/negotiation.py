@@ -6,14 +6,23 @@ Module 2: A2A Negotiation Protocol
 - Every round is logged to audit trail
 """
 
-import os
 import uuid
 import json
 from datetime import datetime
 from identity import validate_spend
 from openai import OpenAI
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Lazy-init so importing this module doesn't require OPENAI_API_KEY at boot.
+_client: OpenAI | None = None
+
+
+def _get_openai_client() -> OpenAI:
+    global _client
+    if _client is None:
+        _client = OpenAI()
+    return _client
+
+
 MAX_ROUNDS = 5
 
 
@@ -43,7 +52,7 @@ Rules:
 Respond ONLY with valid JSON, no markdown:
 {{"action": "accept"|"counter"|"reject", "price": <number>, "reason": "<short reason>"}}"""
 
-    response = client.chat.completions.create(
+    response = _get_openai_client().chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=200,
         messages=[{"role": "user", "content": prompt}]
@@ -89,7 +98,7 @@ Rules:
 Respond ONLY with valid JSON, no markdown:
 {{"action": "accept"|"counter"|"exit", "price": <number>, "reason": "<short reason>"}}"""
     
-    response = client.chat.completions.create(
+    response = _get_openai_client().chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=200,
         messages=[{"role": "user", "content": prompt}]

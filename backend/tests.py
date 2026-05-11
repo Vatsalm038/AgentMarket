@@ -711,6 +711,134 @@ def test_transaction_amount_is_float_not_decimal():
     assert isinstance(txn["amount"], float)
 
 
+# ── Matcher tests (2.1) ─────────────────────────────────────────────────────
+
+def test_haversine_known_distance():
+    """Andheri West (19.1197, 72.8464) <-> Bandra West (19.0596, 72.8295) ~7km."""
+    from matcher import _haversine_km
+
+    d = _haversine_km(19.1197, 72.8464, 19.0596, 72.8295)
+    assert abs(d - 7.0) < 0.5, d
+
+
+def test_haversine_zero_when_identical():
+    from matcher import _haversine_km
+
+    assert _haversine_km(19.1, 72.8, 19.1, 72.8) == 0.0
+
+
+def test_score_no_location_redistributes_weight():
+    """has_location=False must (a) still produce monotonic scores in similarity
+    and price, and (b) put strictly more weight on similarity than the
+    located case for the same similarity."""
+    from matcher import _score
+
+    # Monotonic in similarity (price fixed, no location).
+    s_low = _score(0.2, None, 100.0, 500.0, has_location=False)
+    s_hi = _score(0.8, None, 100.0, 500.0, has_location=False)
+    assert s_hi > s_low
+
+    # Monotonic in cheapness (similarity fixed).
+    cheap = _score(0.5, None, 50.0, 500.0, has_location=False)
+    pricey = _score(0.5, None, 450.0, 500.0, has_location=False)
+    assert cheap > pricey
+
+    # Distance weight redistributes: no-location score with sim=1, price=1
+    # should reach 1.0 (full weight on the two available signals).
+    full = _score(1.0, None, 0.0, 500.0, has_location=False)
+    assert abs(full - 1.0) < 1e-9
+
+
+def test_score_price_at_budget_yields_zero_price_component():
+    """When listed_price == max_price the price normaliser is 0, so the score
+    equals W_SIM*sim + W_DIST*dist (with location)."""
+    from matcher import W_DIST, W_SIM, _score
+
+    s = _score(1.0, 0.0, 500.0, 500.0, has_location=True)
+    # sim=1, dist_km=0 -> dist_n=1, price_n=0
+    assert abs(s - (W_SIM + W_DIST)) < 1e-9
+
+
+def test_score_higher_similarity_wins_ceteris_paribus():
+    from matcher import _score
+
+    a = _score(0.4, 5.0, 200.0, 500.0, has_location=True)
+    b = _score(0.9, 5.0, 200.0, 500.0, has_location=True)
+    assert b > a
+
+
+def test_shortlist_anchors_ranks_higher_cosine_first():
+    """Integration-style: patch the OpenAI embed call to return a fixed query
+    vector and stub session.execute to return two products with controlled
+    embeddings. The higher-cosine product must rank first."""
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    import matcher as matcher_mod
+
+    # Query vector points along axis 0.
+    query_vec = [1.0, 0.0, 0.0]
+    # Product A: aligned with query -> cosine ~1
+    emb_a = [1.0, 0.0, 0.0]
+    # Product B: orthogonal -> cosine ~0
+    emb_b = [0.0, 1.0, 0.0]
+
+    def mkrow(pid, mid, mname, listed, floor, lat, lng, emb):
+        p = MagicMock()
+        p.id = pid
+        p.merchant_id = mid
+        p.name = f"Product {pid}"
+        p.listed_price = listed
+        p.floor_price = floor
+        p.is_active = True
+        p.embedding = emb
+        p.embedding_model = "text-embedding-3-small"
+        m = MagicMock()
+        m.id = mid
+        m.name = mname
+        m.lat = lat
+        m.lng = lng
+        return (p, m)
+
+    session = AsyncMock()
+    result = MagicMock()
+    result.all.return_value = [
+        mkrow("prd_a", "mer_a", "MerchA", 100.0, 50.0, 19.10, 72.85, emb_a),
+        mkrow("prd_b", "mer_b", "MerchB", 100.0, 50.0, 19.10, 72.85, emb_b),
+    ]
+    session.execute.return_value = result
+
+    async def fake_embed(_query):
+        return query_vec
+
+    with patch.object(matcher_mod, "_embed_query", fake_embed):
+        ranked = asyncio.run(matcher_mod.shortlist_anchors(
+            session, "anything", buyer_lat=19.10, buyer_lon=72.85,
+            max_price=500.0, top_n=5,
+        ))
+
+    assert ranked[0]["product_id"] == "prd_a"
+    assert ranked[0]["similarity"] > ranked[1]["similarity"]
+
+
+def test_shortlist_anchors_empty_when_no_candidates():
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    from matcher import shortlist_anchors
+
+    session = AsyncMock()
+    result = MagicMock()
+    result.all.return_value = []
+    session.execute.return_value = result
+
+    rows = asyncio.run(shortlist_anchors(
+        session, "q", buyer_lat=None, buyer_lon=None,
+        max_price=100.0, top_n=5,
+    ))
+    assert rows == []
+
+
 if __name__ == "__main__":
     # Run basic smoke test without pytest
     print("Running smoke tests...\n")

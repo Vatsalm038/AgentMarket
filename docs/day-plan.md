@@ -20,7 +20,7 @@ Total: ~50 hours over ~16 calendar days. Ship by end of Sunday W3.
 
 ## Day 1 — Foundation + Spine
 
-- [x] 1.1 Restructure repo (backend/, mcp-server/, frontend/, docs/, .claude/) — 30m
+- [x] 1.1 Restructure repo (backend/, mcp_server/, frontend/, docs/, .claude/) — 30m
 - [x] 1.2 Schema migration: drop old, add merchants/products/merchant_agents/agent_skills/signed_receipts. Fix FK drift. — 60m (~75m actual; +idempotency_keys table, signed_payload columns, replay flat columns)
 - [x] 1.3 RSA → Ed25519 in identity.py + settlement.py — 45m (tests green; merchant DID generator added per ADR-010)
 - [x] 1.4 Fix policy_id linkage in receipts — 20m (credential carries policy_id; receipt signature commits to the real spending_policies row)
@@ -31,9 +31,9 @@ Total: ~50 hours over ~16 calendar days. Ship by end of Sunday W3.
 - [x] 1.9 End-to-end script scripts/demo_endtoend.py — 90m (HTTP-only demo + smoke test against local uvicorn; deterministic anchor prod_merch_003_09 Canvas Wallet/Andheri; verifies receipt Ed25519 sig client-side using public key captured at /agents/register; idempotency replay byte-identical; replay fields read from audit_log)
 ## Day 2 — Matcher + MCP
 
-- [ ] 2.1 Matcher: haversine + embeddings + price band — 90m
-- [ ] 2.2 Pre-compute product embeddings — 20m
-- [ ] 2.3 MCP server scaffold (fastmcp, port 8001) — 45m
+- [x] 2.1 Matcher: haversine + embeddings + price band — 90m (backend/matcher.py + alembic a1b2c3d4e5f6 composite index; 7 new tests; pure _haversine_km + _score helpers; MatcherEmbeddingError on OpenAI failure; warn-log skipped rows with stale/null embeddings)
+- [x] 2.2 Pre-compute product embeddings — 20m (backend/scripts/embed_products.py; 669/669 embedded, 0 failed, 22853 tokens, ~$0.0005; idempotent re-run is a no-op; per-batch commit)
+- [x] 2.3 MCP server scaffold (fastmcp, port 8001) — 45m (mcp_server/server.py + README; one ping tool; smoke-tested with backend up — backend_health nested in response; pip-upgrade: fastapi 0.115→0.136 to absorb starlette 1.0 brought in by fastmcp 3.2.4)
 - [ ] 2.4 MCP tool: search_local_merchants — 45m
 - [ ] 2.5 MCP tool: negotiate — 90m
 - [ ] 2.6 MCP tool: verify_receipt — 45m

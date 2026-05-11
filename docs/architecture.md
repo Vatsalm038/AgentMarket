@@ -42,7 +42,7 @@ Strict layering. Imports go one direction: domain → adapters → api.
 - routes/webhooks.py
 - ws/ — WebSocket handlers
 
-## MCP server (mcp-server/)
+## MCP server (mcp_server/)
 
 Separate Python process. Calls backend HTTP API. Tools:
 - search_local_merchants(product, location, max_price, radius_km)

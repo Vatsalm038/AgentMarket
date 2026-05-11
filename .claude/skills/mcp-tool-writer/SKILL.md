@@ -1,6 +1,6 @@
 ---
 name: mcp-tool-writer
-description: Use when adding tools to the MCP server (mcp-server/ directory). Ensures tool descriptions are clear, schemas are tight, and behavior is idempotent.
+description: Use when adding tools to the MCP server (mcp_server/ directory). Ensures tool descriptions are clear, schemas are tight, and behavior is idempotent.
 ---
 
 # Writing MCP Tools for AgentMarket
@@ -87,15 +87,14 @@ async def search_local_merchants(input: SearchInput) -> list[SearchResult]:
 
 ## Testing MCP tools locally
 ```bash
-# Run MCP server
-cd mcp-server
-python -m mcp_server
+# Run MCP server (from repo root)
+python -m mcp_server.server
 
 # In another terminal, install in Claude Code
-claude mcp add agentmarket python /path/to/mcp-server/server.py
+claude mcp add agentmarket python /path/to/mcp_server/server.py
 
 # Or test directly with the MCP inspector
-fastmcp dev mcp-server/server.py
+fastmcp dev mcp_server/server.py
 ```
 
 ## Tools currently planned for AgentMarket (see day-plan.md Day 2)
