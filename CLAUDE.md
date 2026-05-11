@@ -101,10 +101,10 @@ not personas. Currently configured:
 
 ## Active context
 
-**Calendar day:** 2026-05-07 (Thu, Day 0 — pre Sat-W1 kickoff). 1.1 + 1.2 shipped 2 days early.
-**Current ticket:** Next up — 1.3 (RSA → Ed25519 in identity.py + settlement.py, 45m)
-**Last decision:** ADR-010 — DID namespace (`did:agent:*` for buyers, `did:merchant:*` for merchants) enforced by app-side ID generators.
-**Blockers:** None. 1.3 is greenfield rewrite with the schema already in place.
+**Calendar day:** 2026-05-11 (Mon, Day 4 of 16). Day 1 (1.1–1.9) fully shipped — 3 calendar days ahead. Next session: Saturday W1 for Day 2 work.
+**Current ticket:** Next up — 2.1 (Matcher: haversine + embeddings + price band, 90m). Weekend-sized; not a weekday 2hr slot.
+**Last decision:** ADR-011 — auction.py shortlists competitors via SQL keyed off `anchor_product_id`; matcher (2.1) selects the anchor, auction does not call the matcher.
+**Blockers:** None on critical path. Two API gaps logged to backlog Tier 1.2 (richer GET /commerce/session response; agent-pubkey lookup) — both block downstream tickets (3.6, 2.6/2.8) but not 2.1.
 
 **Environment notes**
 - Python 3.12 venv at `/home/vatsal/personal/agent-market/.venv` (gitignored)
