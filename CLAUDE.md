@@ -101,10 +101,17 @@ not personas. Currently configured:
 
 ## Active context
 
-**Calendar day:** 2026-05-11 (Mon, Day 4 of 16). Day 1 (1.1–1.9) fully shipped — 3 calendar days ahead. Next session: Saturday W1 for Day 2 work.
-**Current ticket:** Next up — 2.1 (Matcher: haversine + embeddings + price band, 90m). Weekend-sized; not a weekday 2hr slot.
-**Last decision:** ADR-011 — auction.py shortlists competitors via SQL keyed off `anchor_product_id`; matcher (2.1) selects the anchor, auction does not call the matcher.
-**Blockers:** None on critical path. Two API gaps logged to backlog Tier 1.2 (richer GET /commerce/session response; agent-pubkey lookup) — both block downstream tickets (3.6, 2.6/2.8) but not 2.1.
+**Calendar day:** 2026-05-12 (Tue, Day 5 of 16). Days 1 + 2.1-2.3 shipped and pushed. Day 2 ticket 2.4-2.9 implemented but **UNCOMMITTED IN WORKING TREE** — never code-reviewed, no live MCP smoke test yet. User stopped mid-batch.
+**Current ticket:** Resume by code-reviewing the uncommitted 2.4-2.9 batch, running an MCP smoke test, writing docs/mcp-setup.md (2.10), updating day-plan.md + backlog.md, then commit. Detailed pickup list in `~/.claude/projects/-home-vatsal-personal-agent-market/memory/resume_day2_2.4-2.10.md`.
+**Last decision:** Folded two backlog Tier 1.2 items into 2.6/2.7 batch — `GET /agents/{id}/pubkey` and enriched `GET /commerce/session/{id}` shipped with the MCP tools. ADR-007 verifiable replay now actually persists prompts in `negotiation_sessions.replay_data`.
+**Working tree (uncommitted, 45/45 tests passing):**
+- backend/auction.py — replay capture added
+- backend/main.py — pubkey endpoint, /well-known/platform-pubkey, enriched session GET
+- backend/models.py — PlatformKey table, replay_data column
+- backend/tests.py — +2 tests (now 45 total)
+- mcp_server/server.py — full rewrite, 6 tools + in-memory demo identity
+- backend/migrations/versions/c3d4e5f6a7b8_platform_keys.py — already applied locally
+**Blockers:** None. The uncommitted code passes tests; just needs review pass, MCP live smoke (curl one tool end-to-end), and the 2.10 setup doc before commit.
 
 **Environment notes**
 - Python 3.12 venv at `/home/vatsal/personal/agent-market/.venv` (gitignored)
