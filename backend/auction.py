@@ -311,7 +311,7 @@ async def run_auction(
     shortlist = await _shortlist_competitors(db, anchor_product_id, policy_max, num_merchants)
     if not shortlist:
         return {
-            "auction_id": auction_id, "status": "failed",
+            "session_id": auction_id, "status": "failed",
             "reason": f"No active competitors for product {anchor_product_id}",
             "all_quotes": [], "winner": None,
             "buyer_agent_id": buyer_agent_id,
@@ -335,7 +335,7 @@ async def run_auction(
     # fits, since the clamp uses min(listed, policy_max) as the upper bound.)
     if anchor_row["floor_price"] > policy_max:
         return {
-            "auction_id": auction_id, "status": "failed",
+            "session_id": auction_id, "status": "failed",
             "reason": "anchor_unaffordable",
             "anchor_product_id": anchor_row["product_id"],
             "anchor_floor_price": anchor_row["floor_price"],
@@ -375,7 +375,7 @@ async def run_auction(
 
     if not quotes:
         return {
-            "auction_id": auction_id, "status": "failed",
+            "session_id": auction_id, "status": "failed",
             "reason": "No merchants responded",
             "all_quotes": [], "winner": None,
             "buyer_agent_id": buyer_agent_id,
@@ -391,7 +391,7 @@ async def run_auction(
     valid_quotes = [q for q in quotes if q["quote"] <= policy_max]
     if not valid_quotes:
         return {
-            "auction_id": auction_id, "status": "failed",
+            "session_id": auction_id, "status": "failed",
             "reason": f"All quotes exceeded policy max INR {policy_max}",
             "all_quotes": quotes, "valid_quotes_count": 0, "winner": None,
             "buyer_agent_id": buyer_agent_id,
@@ -415,7 +415,7 @@ async def run_auction(
     allowed, reason = validate_spend(credential, winner["final_price"])
     if not allowed:
         return {
-            "auction_id": auction_id, "status": "policy_blocked", "reason": reason,
+            "session_id": auction_id, "status": "policy_blocked", "reason": reason,
             "all_quotes": quotes, "winner": winner,
             "buyer_agent_id": buyer_agent_id,
             "winner_merchant_agent_id": winner["winner_merchant_agent_id"],
@@ -427,7 +427,7 @@ async def run_auction(
     saved_vs_highest = round(max(q["quote"] for q in valid_quotes) - winner["final_price"], 2)
 
     return {
-        "auction_id": auction_id,
+        "session_id": auction_id,
         "status": "settled",
         "item": item,
         "anchor_product_id": anchor_product_id,

@@ -11,6 +11,14 @@
 - [ ] Buyer dashboard (currently MCP-only)
 - [ ] Merchant dashboard (currently SQL-only)
 
+## Tier 1.2 — API gaps surfaced by 1.9 demo script
+- [ ] `GET /commerce/session/{id}` should surface flat replay fields
+  (`winner_skill_id`, `llm_seed`, `signed_receipts` row) at the top level,
+  not only inside `audit_log[*].payload`. Needed for /replay/:id (3.6).
+- [ ] Agent public-key lookup endpoint (e.g. `GET /agents/{id}/pubkey`)
+  for external receipt verification. MCP `verify_receipt` (2.6) cannot
+  ship without this or `/well-known/platform-pubkey` (2.8).
+
 ## Tier 1.5 — schema items deferred from 1.2
 - [ ] `negotiation_sessions.approval_status` + `approved_at` + `approved_by` —
   buyer-approval gate before settlement. Deferred because MCP-first flow

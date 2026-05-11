@@ -522,7 +522,7 @@ async def auction(
             merchant_agent_id = result["winner_merchant_agent_id"]
             product_id = result["winner_product_id"]
             session_dict = {
-                "session_id": result["auction_id"],
+                "session_id": result["session_id"],
                 "item": result["item"],
                 "listed_price": result["listed_price"],
                 "initial_offer": result["final_price"],
