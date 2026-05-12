@@ -839,6 +839,139 @@ def test_shortlist_anchors_empty_when_no_candidates():
     assert rows == []
 
 
+# ── Replay capture + endpoint shape (2.7, 2.8, 2.9) ─────────────────────────
+
+def test_auction_quote_includes_replay_marker():
+    """_merchant_initial_quote / _buyer_evaluate_quotes must attach a `_replay`
+    block carrying the prompt + seed + raw_response so run_auction can
+    accumulate them into replay_data (ADR-007).
+
+    We patch the OpenAI client so the test is pure — no network, no real LLM.
+    """
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    import auction as auction_mod
+
+    fake_resp = MagicMock()
+    fake_resp.choices = [MagicMock(message=MagicMock(
+        content='{"quote": 450, "pitch": "great deal"}'
+    ))]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create = AsyncMock(return_value=fake_resp)
+
+    competitor = {
+        "merchant_id": "mer_1", "merchant_name": "Test Merchant",
+        "merchant_agent_id": "did:merchant:abc",
+        "product_id": "prd_1", "product_name": "Widget",
+        "skill_id": "skl_1", "skill_name": "Persona",
+        "floor_price": 400.0, "listed_price": 500.0,
+    }
+
+    with patch.object(auction_mod, "_get_openai_client", return_value=fake_client):
+        out = asyncio.run(auction_mod._merchant_initial_quote(
+            "auction_xyz", "Widget", 600.0, competitor,
+        ))
+
+    assert "_replay" in out
+    rep = out["_replay"]
+    assert rep["call"] == "merchant_quote"
+    assert rep["seed"] == out["llm_seed"]
+    assert rep["temperature"] == 0
+    assert "Widget" in rep["user_prompt"]
+    assert rep["raw_response"] == '{"quote": 450, "pitch": "great deal"}'
+
+
+def test_run_auction_returns_replay_payload():
+    """run_auction must aggregate per-LLM-call replay markers into a top-level
+    `replay_payload` dict shaped for negotiation_sessions.replay_data."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    import auction as auction_mod
+
+    fake_shortlist = [{
+        "product_id": "prd_a", "product_name": "A",
+        "listed_price": 500.0, "floor_price": 400.0, "category": "x",
+        "merchant_id": "mer_a", "merchant_name": "A",
+        "merchant_agent_id": "did:merchant:a",
+        "skill_id": "skl_1", "skill_name": "P", "system_prompt_template": "tpl",
+    }, {
+        "product_id": "prd_b", "product_name": "B",
+        "listed_price": 480.0, "floor_price": 380.0, "category": "x",
+        "merchant_id": "mer_b", "merchant_name": "B",
+        "merchant_agent_id": "did:merchant:b",
+        "skill_id": "skl_1", "skill_name": "P", "system_prompt_template": "tpl",
+    }]
+
+    async def fake_shortlist_fn(*a, **kw):
+        return fake_shortlist
+
+    async def fake_merchant(_aid, _item, _budget, comp):
+        return {
+            "merchant_id": comp["merchant_id"],
+            "merchant_name": comp["merchant_name"],
+            "merchant_agent_id": comp["merchant_agent_id"],
+            "product_id": comp["product_id"],
+            "product_name": comp["product_name"],
+            "skill_id": comp["skill_id"],
+            "floor_price": comp["floor_price"],
+            "listed_price": comp["listed_price"],
+            "quote": comp["floor_price"] + 10,
+            "pitch": "p",
+            "llm_seed": 123,
+            "_replay": {
+                "call": "merchant_quote",
+                "merchant_agent_id": comp["merchant_agent_id"],
+                "merchant_name": comp["merchant_name"],
+                "model": "gpt-4o-mini", "temperature": 0,
+                "seed": 123, "user_prompt": "uprompt",
+                "raw_response": "rresp",
+            },
+        }
+
+    async def fake_buyer(_aid, _item, valid_quotes, _policy_max, _prio):
+        winner = valid_quotes[0]
+        return {
+            "winner_merchant_id": winner["merchant_id"],
+            "winner_merchant_name": winner["merchant_name"],
+            "winner_merchant_agent_id": winner["merchant_agent_id"],
+            "winner_product_id": winner["product_id"],
+            "winner_skill_id": winner["skill_id"],
+            "reason": "r",
+            "final_price": winner["quote"],
+            "llm_seed": 456,
+            "_replay": {
+                "call": "buyer_eval",
+                "model": "gpt-4o-mini", "temperature": 0,
+                "seed": 456, "user_prompt": "bprompt", "raw_response": "bresp",
+            },
+        }
+
+    credential = {
+        "agent_id": "did:agent:test", "policy_id": "pol_t",
+        "policy": {"max_per_txn": 1000.0, "max_per_day": 5000.0, "currency": "INR"},
+    }
+
+    db = AsyncMock()
+    with patch.object(auction_mod, "_shortlist_competitors", fake_shortlist_fn), \
+         patch.object(auction_mod, "_merchant_initial_quote", fake_merchant), \
+         patch.object(auction_mod, "_buyer_evaluate_quotes", fake_buyer):
+        result = asyncio.run(auction_mod.run_auction(db, "prd_a", credential))
+
+    assert result["status"] == "settled"
+    assert "replay_payload" in result
+    auction_block = result["replay_payload"]["auction"]
+    assert auction_block["model"] == "gpt-4o-mini"
+    assert auction_block["temperature"] == 0
+    assert len(auction_block["merchant_quotes"]) == 2
+    assert auction_block["buyer_eval"]["call"] == "buyer_eval"
+    # Public quotes/winner must NOT leak the _replay marker.
+    assert "_replay" not in result["winner"]
+    for q in result["all_quotes"]:
+        assert "_replay" not in q
+
+
 if __name__ == "__main__":
     # Run basic smoke test without pytest
     print("Running smoke tests...\n")

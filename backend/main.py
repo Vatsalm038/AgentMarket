@@ -17,10 +17,13 @@ import enum
 import hashlib
 import json
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
+from cryptography.hazmat.primitives import serialization as _ser
+from cryptography.hazmat.primitives.asymmetric import ed25519 as _ed
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -35,8 +38,8 @@ from database import get_db, init_db
 from identity import (create_agent_credential, generate_agent_id, generate_keypair,
                       sign_policy, validate_spend, verify_policy_signature)
 from models import (Agent, AgentRole, AgentSkill, AuditLog, IdempotencyKey, Merchant,
-                    MerchantAgent, NegotiationSession, Product, SignedReceipt,
-                    SpendingPolicy, TxnStatus)
+                    MerchantAgent, NegotiationSession, Product,
+                    SignedReceipt, SpendingPolicy, TxnStatus)
 from negotiation import run_negotiation
 from razorpay_settlement import settle_via_razorpay
 from settlement import _canonical_bytes, build_audit_log, create_transaction
@@ -53,9 +56,47 @@ _PLACEHOLDER_MERCHANT_AGENT_ID = "did:merchant:placeholder000000000000000000000"
 _PLACEHOLDER_PRODUCT_ID = "prd_placeholder"
 
 
+# Platform Ed25519 keypair lives only in process memory (CLAUDE.md rule 7).
+# Loaded at startup from PLATFORM_PRIVATE_KEY_B64; if absent, generated and
+# logged so the operator can pin a stable value across restarts. Never persisted.
+_PLATFORM_PUB_B64: str | None = None
+_PLATFORM_ISSUED_AT: str | None = None
+_PLATFORM_SOURCE: str | None = None
+
+
+def _load_platform_keypair() -> None:
+    global _PLATFORM_PUB_B64, _PLATFORM_ISSUED_AT, _PLATFORM_SOURCE
+    env_priv = os.getenv("PLATFORM_PRIVATE_KEY_B64")
+    if env_priv:
+        try:
+            priv = _ed.Ed25519PrivateKey.from_private_bytes(base64.b64decode(env_priv))
+            source = "env"
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError(f"PLATFORM_PRIVATE_KEY_B64 is malformed: {exc}") from exc
+    else:
+        priv = _ed.Ed25519PrivateKey.generate()
+        priv_raw = priv.private_bytes(
+            encoding=_ser.Encoding.Raw, format=_ser.PrivateFormat.Raw,
+            encryption_algorithm=_ser.NoEncryption(),
+        )
+        logger.warning(
+            "PLATFORM_PRIVATE_KEY_B64 unset — generated an ephemeral platform "
+            "keypair. Pin it across restarts by setting "
+            "PLATFORM_PRIVATE_KEY_B64=%s", base64.b64encode(priv_raw).decode(),
+        )
+        source = "ephemeral"
+    pub_raw = priv.public_key().public_bytes(
+        encoding=_ser.Encoding.Raw, format=_ser.PublicFormat.Raw,
+    )
+    _PLATFORM_PUB_B64 = base64.b64encode(pub_raw).decode()
+    _PLATFORM_ISSUED_AT = datetime.now(timezone.utc).isoformat()
+    _PLATFORM_SOURCE = source
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    _load_platform_keypair()
     yield
 
 
@@ -426,6 +467,56 @@ async def get_agent_spend(agent_id: str, db: AsyncSession = Depends(get_db)):
     return await get_spend_summary(agent_id, db)
 
 
+@app.get("/agents/{agent_id}/pubkey")
+async def get_agent_pubkey(agent_id: str, db: AsyncSession = Depends(get_db)):
+    """Public-key lookup for receipt verification. Resolves both buyer agents
+    (did:agent:*) and merchant agents (did:merchant:*) by DID prefix per ADR-010.
+    No auth — public keys are public by definition."""
+    if agent_id.startswith("did:merchant:"):
+        result = await db.execute(
+            select(MerchantAgent).where(MerchantAgent.id == agent_id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Merchant agent not found")
+        return {
+            "agent_id": row.id,
+            "public_key": base64.b64encode(row.public_key).decode(),
+            "kind": "merchant",
+            "registered_at": row.created_at.isoformat(),
+        }
+
+    # Default branch is the buyer table; covers did:agent:* and any legacy IDs.
+    result = await db.execute(select(Agent).where(Agent.id == agent_id))
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {
+        "agent_id": row.id,
+        "public_key": base64.b64encode(row.public_key).decode(),
+        "kind": "buyer",
+        "registered_at": row.created_at.isoformat(),
+    }
+
+
+@app.get("/.well-known/platform-pubkey")
+async def platform_pubkey():
+    """Serve the platform-level Ed25519 public key for external verifiers.
+
+    Read-only. Key loaded once at app startup from PLATFORM_PRIVATE_KEY_B64
+    (or ephemerally generated in dev). Private key never crosses the wire and
+    is never persisted (CLAUDE.md rule 7)."""
+    if _PLATFORM_PUB_B64 is None:
+        raise HTTPException(status_code=503, detail="Platform key not initialised")
+    return {
+        "public_key": _PLATFORM_PUB_B64,
+        "algorithm": "Ed25519",
+        "issued_at": _PLATFORM_ISSUED_AT,
+        "kind": "platform",
+        "source": _PLATFORM_SOURCE,
+    }
+
+
 @app.post("/commerce/negotiate")
 async def negotiate(
     req: NegotiateRequest,
@@ -515,6 +606,7 @@ async def auction(
             credential=credential,
             num_merchants=req.num_merchants,
             buyer_priorities=req.buyer_priorities,
+            daily_spent=daily_spent,
         )
 
         if result["status"] == "settled":
@@ -541,6 +633,26 @@ async def auction(
             result["transaction"] = transaction
             result["razorpay_receipt"] = razorpay_receipt
             result["audit_entries"] = len(logs)
+
+            # Persist replay data on the session row (ADR-007). Captured by
+            # auction.py and threaded through here so replay_negotiation can
+            # re-run the auction with byte-identical prompts/seeds. We avoid
+            # broadcasting the full replay payload back in the HTTP response —
+            # callers fetch it from /commerce/session/{id} when they need it.
+            replay_payload = result.pop("replay_payload", None)
+            if replay_payload is not None:
+                await db.execute(
+                    update(NegotiationSession)
+                    .where(NegotiationSession.id == result["session_id"])
+                    .values(
+                        replay_data=replay_payload,
+                        replay_model=replay_payload.get("auction", {}).get("model"),
+                        replay_seed=(
+                            (replay_payload.get("auction", {}).get("buyer_eval") or {})
+                            .get("seed")
+                        ),
+                    )
+                )
 
         await _idempotency_finalize(db, endpoint, idempotency_key, result)
         await db.commit()
@@ -578,6 +690,38 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
     )
     logs = log_result.scalars().all()
 
+    # Pull the persisted receipt (if any) — surfaced at the top level so
+    # external verifiers / replay tools don't need to dig into audit_log.
+    rcpt_result = await db.execute(
+        select(SignedReceipt).where(SignedReceipt.session_id == session_id)
+    )
+    receipt = rcpt_result.scalar_one_or_none()
+    signed_receipt = None
+    if receipt is not None:
+        signed_receipt = {
+            "receipt_id": receipt.receipt_id,
+            "policy_id": receipt.policy_id,
+            "buyer_agent_id": receipt.buyer_agent_id,
+            "merchant_agent_id": receipt.merchant_agent_id,
+            "amount_inr": float(receipt.amount_inr),
+            "payload_json": receipt.payload_json,
+            "signature_b64": base64.b64encode(receipt.agent_signature).decode(),
+            "signed_payload_b64": base64.b64encode(receipt.signed_payload).decode(),
+            "razorpay_order_id": receipt.razorpay_order_id,
+            "razorpay_payment_id": receipt.razorpay_payment_id,
+            "created_at": receipt.created_at.isoformat(),
+        }
+
+    # Surface flat replay fields at the top level for /replay/:id (3.6) and
+    # the replay_negotiation MCP tool. Existing audit_log shape is preserved.
+    winner_skill_id = None
+    llm_seed = None
+    for log in logs:
+        if log.event == "auction_winner_selected":
+            winner_skill_id = (log.payload or {}).get("winner_skill_id")
+            llm_seed = (log.payload or {}).get("llm_seed")
+            break
+
     return {
         "session": {
             "id": session.id, "item": session.item, "status": session.status.value,
@@ -586,9 +730,17 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
             "rounds": session.rounds,
             "created_at": session.created_at.isoformat(),
             "settled_at": session.settled_at.isoformat() if session.settled_at else None,
+            "policy_id": session.policy_id,
+            "buyer_agent_id": session.buyer_agent_id,
+            "merchant_agent_id": session.merchant_agent_id,
+            "product_id": session.product_id,
         },
         "audit_log": [{"event": l.event, "payload": l.payload,
                        "timestamp": l.timestamp.isoformat()} for l in logs],
+        "signed_receipt": signed_receipt,
+        "winner_skill_id": winner_skill_id,
+        "llm_seed": llm_seed,
+        "replay_data": session.replay_data,
     }
 
 

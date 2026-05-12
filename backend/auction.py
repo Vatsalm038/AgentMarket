@@ -235,6 +235,18 @@ async def _merchant_initial_quote(
         "quote": clamped,
         "pitch": str(parsed.get("pitch", ""))[:280],
         "llm_seed": seed,
+        # Replay capture (ADR-007). Persisted into negotiation_sessions.replay_data
+        # by the caller so replay_negotiation can re-run with byte-identical inputs.
+        "_replay": {
+            "call": "merchant_quote",
+            "merchant_agent_id": competitor["merchant_agent_id"],
+            "merchant_name": competitor["merchant_name"],
+            "model": _LLM_MODEL,
+            "temperature": 0,
+            "seed": seed,
+            "user_prompt": prompt,
+            "raw_response": raw,
+        },
     }
 
 
@@ -294,6 +306,14 @@ async def _buyer_evaluate_quotes(
         "reason": str(parsed.get("reason", ""))[:280],
         "final_price": round(final_price, 2),
         "llm_seed": seed,
+        "_replay": {
+            "call": "buyer_eval",
+            "model": _LLM_MODEL,
+            "temperature": 0,
+            "seed": seed,
+            "user_prompt": prompt,
+            "raw_response": raw,
+        },
     }
 
 
@@ -305,6 +325,7 @@ async def run_auction(
     credential: dict,
     buyer_priorities: str = "lowest price",
     num_merchants: int = 3,
+    daily_spent: float = 0.0,
 ) -> dict:
     """Run a multi-merchant auction anchored on `anchor_product_id`.
 
@@ -421,7 +442,7 @@ async def run_auction(
         auction_id, winner["winner_merchant_name"], winner["final_price"],
     )
 
-    allowed, reason = validate_spend(credential, winner["final_price"])
+    allowed, reason = validate_spend(credential, winner["final_price"], daily_spent)
     if not allowed:
         return {
             "session_id": auction_id, "status": "policy_blocked", "reason": reason,
@@ -435,22 +456,39 @@ async def run_auction(
     saved_vs_listed = round(listed_price - winner["final_price"], 2)
     saved_vs_highest = round(max(q["quote"] for q in valid_quotes) - winner["final_price"], 2)
 
+    # Assemble the replay payload (ADR-007) — every prompt + seed needed to
+    # reproduce this auction. Caller persists this into negotiation_sessions.replay_data.
+    replay_payload = {
+        "auction": {
+            "model": _LLM_MODEL,
+            "temperature": 0,
+            "buyer_priorities": buyer_priorities,
+            "merchant_quotes": [q["_replay"] for q in quotes if "_replay" in q],
+            "buyer_eval": winner.get("_replay"),
+        }
+    }
+
+    # Strip internal _replay markers from the public-facing dicts.
+    public_quotes = [{k: v for k, v in q.items() if k != "_replay"} for q in quotes]
+    public_winner = {k: v for k, v in winner.items() if k != "_replay"}
+
     return {
         "session_id": auction_id,
         "status": "settled",
         "item": item,
         "anchor_product_id": anchor_product_id,
         "listed_price": listed_price,
-        "all_quotes": quotes,
+        "all_quotes": public_quotes,
         "valid_quotes_count": len(valid_quotes),
-        "winner": winner,
-        "final_price": winner["final_price"],
+        "winner": public_winner,
+        "final_price": public_winner["final_price"],
         "buyer_agent_id": buyer_agent_id,
-        "winner_merchant_agent_id": winner["winner_merchant_agent_id"],
-        "winner_product_id": winner["winner_product_id"],
+        "winner_merchant_agent_id": public_winner["winner_merchant_agent_id"],
+        "winner_product_id": public_winner["winner_product_id"],
         "savings_vs_listed": saved_vs_listed,
         "savings_vs_highest_quote": saved_vs_highest,
         "buyer_priorities": buyer_priorities,
         "merchants_competed": len(shortlist),
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "replay_payload": replay_payload,
     }

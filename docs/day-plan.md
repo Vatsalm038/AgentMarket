@@ -34,13 +34,18 @@ Total: ~50 hours over ~16 calendar days. Ship by end of Sunday W3.
 - [x] 2.1 Matcher: haversine + embeddings + price band — 90m (backend/matcher.py + alembic a1b2c3d4e5f6 composite index; 7 new tests; pure _haversine_km + _score helpers; MatcherEmbeddingError on OpenAI failure; warn-log skipped rows with stale/null embeddings)
 - [x] 2.2 Pre-compute product embeddings — 20m (backend/scripts/embed_products.py; 669/669 embedded, 0 failed, 22853 tokens, ~$0.0005; idempotent re-run is a no-op; per-batch commit)
 - [x] 2.3 MCP server scaffold (fastmcp, port 8001) — 45m (mcp_server/server.py + README; one ping tool; smoke-tested with backend up — backend_health nested in response; pip-upgrade: fastapi 0.115→0.136 to absorb starlette 1.0 brought in by fastmcp 3.2.4)
-- [ ] 2.4 MCP tool: search_local_merchants — 45m
-- [ ] 2.5 MCP tool: negotiate — 90m
-- [ ] 2.6 MCP tool: verify_receipt — 45m
-- [ ] 2.7 MCP tool: get_audit_trail — 30m
-- [ ] 2.8 /well-known/platform-pubkey endpoint — 15m
-- [ ] 2.9 Verifiable replay: store prompts + seed in replay_data, add replay_negotiation tool — 60m
-- [ ] 2.10 Test full flow in Claude.ai with local MCP — 30m
+- [x] 2.4 MCP tool: search_local_merchants — 45m (wraps matcher.shortlist_anchors; reshaped for human-readable output)
+- [x] 2.5 MCP tool: negotiate — 90m (MCP-held demo buyer; deterministic idem key from canonical inputs)
+- [x] 2.6 MCP tool: verify_receipt — 45m (folded backlog Tier 1.2 — GET /agents/{id}/pubkey shipped on backend)
+- [x] 2.7 MCP tool: get_audit_trail — 30m (folded backlog Tier 1.2 — GET /commerce/session/{id} now surfaces signed_receipt + winner_skill_id + llm_seed + replay_data at top level)
+- [x] 2.8 /well-known/platform-pubkey endpoint — 15m (env-or-ephemeral module-cached keypair after code review B1/B2; no DB storage)
+- [x] 2.9 Verifiable replay: store prompts + seed in replay_data, add replay_negotiation tool — 60m (auction.py captures merchant_quote + buyer_eval prompts; MCP replay_negotiation re-runs and compares honestly)
+- [x] 2.10 docs/mcp-setup.md + fresh-laptop-setup.md + live MCP smoke test — 60m (all 6 tools verified end-to-end: ping, search, negotiate, idempotency replay, verify_receipt verified=true, audit trail rendering)
+
+**Day 2 closeout (2026-05-12):** code-review pass surfaced 4 blockers (B1 GET-mutates, B2
+rule-7 platform key storage, B3 daily-cap bypass on auction, M4 random idem key) — all
+fixed before commit. Remaining majors/minors triaged into backlog Tier 1.3. 45/45 tests
+passing, live MCP smoke test green. Pushed to GitHub for laptop-transition checkpoint.
 
 ## Day 3 — Frontend (Anthropic/bank aesthetic)
 
