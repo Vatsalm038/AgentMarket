@@ -1,0 +1,12 @@
+/* Font packages bundled into the build via npm — no CDN dependency */
+@import '@fontsource/inter';
+@import '@fontsource/jetbrains-mono';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ensure Inter is applied globally; Tailwind's font-sans class inherits this */
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}

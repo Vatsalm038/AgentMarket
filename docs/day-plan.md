@@ -49,8 +49,8 @@ passing, live MCP smoke test green. Pushed to GitHub for laptop-transition check
 
 ## Day 3 — Frontend (Anthropic/bank aesthetic)
 
-- [ ] 3.1 Vite + React + TS + Tailwind + shadcn (zinc theme) — 45m
-- [ ] 3.2 TanStack Query, axios client, types — 30m
+- [x] 3.1 Vite + React + TS + Tailwind + shadcn (zinc theme) — 45m
+- [x] 3.2 TanStack Query, axios client, types — 30m
 - [ ] 3.3 Landing page / — 60m
 - [ ] 3.4 /session/:id (auth + trail + receipt sections) — 210m
 - [ ] 3.5 /sessions table list — 60m
