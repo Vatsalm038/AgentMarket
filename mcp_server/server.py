@@ -18,7 +18,7 @@ Auth model (intentionally tiny for the MVP demo):
   flow (see backlog Tier 1 — MCP private-key-over-HTTP hardening).
 
 Run from repo root:
-    /home/vatsal/personal/agent-market/.venv/bin/python -m mcp_server.server
+    source .venv/bin/activate && python -m mcp_server.server
 """
 
 from __future__ import annotations
@@ -38,6 +38,10 @@ import httpx
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from fastmcp import FastMCP
+
+# Load .env from repo root before any getenv calls
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 # Make the flat-layout backend importable so DB sessions can be opened
 # directly from inside MCP tools (search_local_merchants reads via matcher).

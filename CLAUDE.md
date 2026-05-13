@@ -107,7 +107,7 @@ not personas. Currently configured:
 **Working tree:** Clean (all days committed).
 
 **Environment notes**
-- Python 3.12 venv at `/home/vatsal/personal/agent-market/.venv` (gitignored)
+- Python 3.11 venv at `/home/vatsal_mehta/vatsal_pr/AgentMarket/.venv` (gitignored) — `uv venv .venv --python 3.11 && uv pip install -r backend/requirements.txt`
 - Postgres 12.22 local, db `agentdb`, user `nimbbl`, pgcrypto enabled
 - Migration `365bcb27952f` (initial schema) applied and at head
 - `_env.example` lives at repo root (placeholders); real `.env` is yours, gitignored, with the OpenAI key under `OPENAI_API_KEY` (not `ANTHROPIC_API_KEY`)
