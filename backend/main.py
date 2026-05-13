@@ -12,9 +12,11 @@ Endpoints:
   GET  /health                    — health check
 """
 
+import asyncio
 import base64
 import enum
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -24,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 
 from cryptography.hazmat.primitives import serialization as _ser
 from cryptography.hazmat.primitives.asymmetric import ed25519 as _ed
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import select, update
@@ -41,7 +43,9 @@ from models import (Agent, AgentRole, AgentSkill, AuditLog, IdempotencyKey, Merc
                     MerchantAgent, NegotiationSession, Product,
                     SignedReceipt, SpendingPolicy, TxnStatus)
 from negotiation import run_negotiation
-from razorpay_settlement import settle_via_razorpay
+from razorpay_settlement import (settle_via_razorpay, create_razorpay_order,
+                                 RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
+                                 RAZORPAY_AVAILABLE)
 from settlement import _canonical_bytes, build_audit_log, create_transaction
 from spend_tracker import get_daily_spent, get_spend_summary
 
@@ -56,12 +60,42 @@ _PLACEHOLDER_MERCHANT_AGENT_ID = "did:merchant:placeholder000000000000000000000"
 _PLACEHOLDER_PRODUCT_ID = "prd_placeholder"
 
 
+# WebSocket subscriber queues keyed by session_id. Each connected client gets
+# its own asyncio.Queue so _ws_publish can fan-out without blocking.
+_session_subscribers: dict[str, set[asyncio.Queue]] = {}
+
+
 # Platform Ed25519 keypair lives only in process memory (CLAUDE.md rule 7).
 # Loaded at startup from PLATFORM_PRIVATE_KEY_B64; if absent, generated and
 # logged so the operator can pin a stable value across restarts. Never persisted.
 _PLATFORM_PUB_B64: str | None = None
 _PLATFORM_ISSUED_AT: str | None = None
 _PLATFORM_SOURCE: str | None = None
+
+
+async def _ws_publish(session_id: str, event: dict) -> None:
+    """Fan-out an event dict to every queue subscribed to session_id.
+
+    Fire-and-forget: callers wrap with asyncio.create_task so they never
+    block the HTTP response path waiting for slow WebSocket consumers."""
+    for q in list(_session_subscribers.get(session_id, set())):
+        await q.put(event)
+
+
+async def _ws_subscribe(session_id: str) -> asyncio.Queue:
+    """Register a new per-client queue and return it."""
+    q: asyncio.Queue = asyncio.Queue()
+    _session_subscribers.setdefault(session_id, set()).add(q)
+    return q
+
+
+def _ws_unsubscribe(session_id: str, q: asyncio.Queue) -> None:
+    """Remove a client queue; clean up the session key when empty."""
+    subscribers = _session_subscribers.get(session_id)
+    if subscribers:
+        subscribers.discard(q)
+        if not subscribers:
+            _session_subscribers.pop(session_id, None)
 
 
 def _load_platform_keypair() -> None:
@@ -389,6 +423,14 @@ async def save_session_and_audit(
             event=entry["event"],
             payload=entry["payload"],
         ))
+
+    # Notify any live WebSocket subscribers about the final session status.
+    asyncio.create_task(_ws_publish(session["session_id"], {
+        "type": "session_update",
+        "session_id": session["session_id"],
+        "status": session["status"],
+        "final_price": session.get("final_price"),
+    }))
 
     # No commit here — the outer endpoint commits once after _idempotency_finalize
     # so the work and the idempotency UPDATE either both land or both roll back.
@@ -764,3 +806,192 @@ async def revoke_session(session_id: str, req: RevokeRequest,
     ))
     await db.commit()
     return {"session_id": session_id, "status": "revoked", "reason": req.reason}
+
+
+@app.post("/commerce/checkout/{session_id}")
+async def checkout_session(
+    session_id: str,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8),
+):
+    """Create a Razorpay order for a settled session.
+
+    Idempotent: repeated calls with the same Idempotency-Key return the cached
+    order dict. The request_hash is keyed on session_id so two different callers
+    with the same key but different session_ids are caught by the mismatch guard."""
+    endpoint = "/commerce/checkout"
+    # Hash on session_id so the idempotency check is body-independent (no Pydantic body).
+    request_hash = hashlib.sha256(session_id.encode()).hexdigest()
+
+    claimed = await _idempotency_claim(db, endpoint, idempotency_key, request_hash)
+    if not claimed:
+        cached = await _idempotency_replay_or_409(db, endpoint, idempotency_key, request_hash)
+        response.headers["Idempotent-Replay"] = "true"
+        return cached
+
+    try:
+        s_result = await db.execute(
+            select(NegotiationSession).where(NegotiationSession.id == session_id)
+        )
+        session = s_result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session.status != TxnStatus.SETTLED:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Session is '{session.status.value}', must be 'settled' to checkout",
+            )
+
+        # Fetch the existing SignedReceipt so we can attach the new order ID.
+        rcpt_result = await db.execute(
+            select(SignedReceipt).where(SignedReceipt.session_id == session_id)
+        )
+        receipt = rcpt_result.scalar_one_or_none()
+        if receipt is None:
+            raise HTTPException(status_code=404, detail="No receipt found for session")
+
+        order = create_razorpay_order(
+            amount_inr=float(session.final_price),
+            item=session.item,
+            session_id=session_id,
+            agent_id=session.buyer_agent_id,
+        )
+
+        # Persist the Razorpay order ID on the receipt so the webhook can correlate.
+        receipt.razorpay_order_id = order["id"]
+        db.add(receipt)
+
+        db.add(AuditLog(
+            session_id=session_id,
+            agent_id=session.buyer_agent_id,
+            event="razorpay_order_created",
+            payload={"razorpay_order_id": order["id"], "amount_paise": order["amount"],
+                     "mock": order.get("mock", False)},
+        ))
+
+        asyncio.create_task(_ws_publish(session_id, {
+            "type": "checkout_created",
+            "session_id": session_id,
+            "razorpay_order_id": order["id"],
+        }))
+
+        body = {
+            "session_id": session_id,
+            "razorpay_order_id": order["id"],
+            "amount_paise": order["amount"],
+            "currency": "INR",
+            "status": order.get("status", "created"),
+            "mock": order.get("mock", False),
+        }
+        await _idempotency_finalize(db, endpoint, idempotency_key, body)
+        await db.commit()
+        return body
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@app.post("/webhooks/razorpay")
+async def razorpay_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    """Receive Razorpay payment.captured / payment.failed webhook events.
+
+    Signature verification uses HMAC-SHA256 over the raw request body with
+    RAZORPAY_KEY_SECRET as the key, matching Razorpay's webhook spec. When
+    RAZORPAY_AVAILABLE is False (mock/dev) the signature check is skipped so
+    integration tests can POST without real credentials."""
+    raw_body = await request.body()
+
+    if RAZORPAY_AVAILABLE:
+        # Razorpay sends the HMAC in X-Razorpay-Signature; reject missing header.
+        incoming_sig = request.headers.get("X-Razorpay-Signature", "")
+        expected_sig = hmac.new(
+            RAZORPAY_KEY_SECRET.encode(),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(expected_sig, incoming_sig):
+            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Webhook body is not valid JSON")
+
+    event = payload.get("event", "")
+    payment_entity = (payload.get("payload") or {}).get("payment", {}).get("entity", {})
+    razorpay_order_id = payment_entity.get("order_id")
+    razorpay_payment_id = payment_entity.get("id")
+
+    if not razorpay_order_id:
+        # Acknowledge non-payment events (e.g. order.paid) without processing.
+        return {"status": "ok"}
+
+    rcpt_result = await db.execute(
+        select(SignedReceipt).where(SignedReceipt.razorpay_order_id == razorpay_order_id)
+    )
+    receipt = rcpt_result.scalar_one_or_none()
+    if receipt is None:
+        # Unknown order — acknowledge so Razorpay stops retrying.
+        logger.warning("razorpay_webhook unknown order_id=%s event=%s", razorpay_order_id, event)
+        return {"status": "ok"}
+
+    if razorpay_payment_id:
+        receipt.razorpay_payment_id = razorpay_payment_id
+        db.add(receipt)
+
+    db.add(AuditLog(
+        session_id=receipt.session_id,
+        agent_id=receipt.buyer_agent_id,
+        event=f"razorpay_webhook_{event}",
+        payload={"razorpay_order_id": razorpay_order_id,
+                 "razorpay_payment_id": razorpay_payment_id,
+                 "event": event},
+    ))
+
+    asyncio.create_task(_ws_publish(receipt.session_id, {
+        "type": "payment_event",
+        "session_id": receipt.session_id,
+        "event": event,
+        "razorpay_order_id": razorpay_order_id,
+        "razorpay_payment_id": razorpay_payment_id,
+    }))
+
+    await db.commit()
+    return {"status": "ok"}
+
+
+@app.websocket("/ws/session/{session_id}")
+async def ws_session(session_id: str, websocket: WebSocket):
+    """Push real-time session events to connected clients.
+
+    Events are published by save_session_and_audit, checkout_session, and
+    razorpay_webhook via _ws_publish. The client receives JSON objects with
+    a 'type' discriminator field. Connection is closed cleanly on disconnect
+    or when the client sends any message (treated as an unsubscribe signal)."""
+    await websocket.accept()
+    q = await _ws_subscribe(session_id)
+    try:
+        while True:
+            # Wait for the next event or a client-side close frame.
+            # asyncio.wait is used so we can race the queue against the socket.
+            queue_task = asyncio.ensure_future(q.get())
+            recv_task = asyncio.ensure_future(websocket.receive_text())
+            done, pending = await asyncio.wait(
+                {queue_task, recv_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for t in pending:
+                t.cancel()
+
+            if recv_task in done:
+                # Any incoming message triggers a clean close.
+                break
+
+            if queue_task in done:
+                event = queue_task.result()
+                await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        _ws_unsubscribe(session_id, q)
