@@ -51,22 +51,22 @@ passing, live MCP smoke test green. Pushed to GitHub for laptop-transition check
 
 - [x] 3.1 Vite + React + TS + Tailwind + shadcn (zinc theme) — 45m
 - [x] 3.2 TanStack Query, axios client, types — 30m
-- [ ] 3.3 Landing page / — 60m
-- [ ] 3.4 /session/:id (auth + trail + receipt sections) — 210m
-- [ ] 3.5 /sessions table list — 60m
-- [ ] 3.6 /replay/:id side-by-side — 90m
-- [ ] 3.7 /install-mcp copy-paste page — 45m
-- [ ] 3.8 Empty states, skeletons, error boundaries — 45m
+- [x] 3.3 Landing page / — 60m
+- [x] 3.4 /session/:id (auth + trail + receipt sections) — 210m
+- [x] 3.5 /sessions table list — 60m
+- [x] 3.6 /replay/:id side-by-side — 90m
+- [x] 3.7 /install-mcp copy-paste page — 45m
+- [x] 3.8 Empty states, skeletons, error boundaries — 45m
 
 ## Day 4 — Razorpay + WebSocket + audit polish
 
-- [ ] 4.1 Razorpay test mode integration end-to-end — 90m
-- [ ] 4.2 Webhook signature verification — 30m
-- [ ] 4.3 WebSocket /ws/session/:id streaming — 60m
-- [ ] 4.4 Frontend live updates via WebSocket — 45m
-- [ ] 4.5 Audit log polish + show-full toggle — 60m
-- [ ] 4.6 "Download signed receipt" button — 20m
-- [ ] 4.7 /verify standalone page — 45m
+- [x] 4.1 Razorpay test mode integration end-to-end — 90m
+- [x] 4.2 Webhook signature verification — 30m
+- [x] 4.3 WebSocket /ws/session/:id streaming — 60m
+- [x] 4.4 Frontend live updates via WebSocket — 45m
+- [x] 4.5 Audit log polish + show-full toggle — 60m
+- [x] 4.6 "Download signed receipt" button — 20m
+- [x] 4.7 /verify standalone page — 45m
 
 ## Day 5 — Deploy + video + launch
 
