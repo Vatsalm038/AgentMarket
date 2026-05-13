@@ -1,10 +1,9 @@
 # Agent Market
 
-> Two-sided agentic marketplace for Indian hyperlocal commerce.
-> AI agents negotiate on behalf of buyers and merchants. Every spending decision
-> is cryptographically bounded; every transaction is verifiable.
+AgentMarket is a two-sided agentic marketplace for Indian hyperlocal commerce. Buyers describe what they want in natural language; AI agents then run a multi-merchant auction, negotiate prices, and produce a verifiable settlement. Every spending decision is cryptographically bounded by an Ed25519-signed delegation policy — no money can move beyond what the buyer pre-authorised. Every transaction produces a signed receipt with verifiable replay: you can re-run the exact LLM prompts and confirm the auction output is reproducible. The primary interface for buyers is the MCP server, which connects AgentMarket as a tool inside Claude.ai or ChatGPT.
 
 **Status:** MVP in progress (5 working days, ~3 calendar weeks).
+**Important:** Razorpay is in test mode only — no real money moves.
 
 ## Quick links
 - [Project brief](docs/project-brief.md) — what we're building and why
@@ -38,22 +37,36 @@ Start every session with `/start-day` to load context and pick the next ticket.
 ## Local dev
 
 ```bash
-# Backend
+# 1. Clone and set up env
+cp _env.example .env
+# Edit .env — fill in OPENAI_API_KEY, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
+# and generate PLATFORM_PRIVATE_KEY_B64 using the command in _env.example.
+
+# 2. Start Postgres
+docker compose up -d
+
+# 3. Backend
 cd backend
-python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-docker compose up -d postgres
-alembic upgrade head  # or run migrations/ SQL files manually
-uvicorn app.api.main:app --reload --port 8000
+alembic upgrade head
+python scripts/seed.py
+python scripts/embed_products.py     # ~2 min, ~$0.001 in embedding costs
+uvicorn main:app --reload --port 8000
 
-# MCP server (from repo root)
-python -m mcp_server.server  # serves on port 8001
+# 4. MCP server (separate terminal, from mcp_server/)
+cd mcp_server
+pip install -r requirements.txt
+python server.py                     # serves on port 8001
 
-# Frontend
+# 5. Frontend
 cd frontend
 npm install
-npm run dev  # serves on port 5173
+npm run dev                          # serves on port 5173, proxies /api → :8000
 ```
+
+To connect the MCP server to Claude.ai, visit `/install-mcp` once the backend is running.
+
+See [docs/architecture.md](docs/architecture.md) for a full system diagram and module guide.
 
 ## Demo
 

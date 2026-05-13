@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -43,14 +44,13 @@ export function VerifyPage() {
   const hasSignature = Boolean(receipt?.signature_b64)
 
   return (
-    <div className="min-h-screen bg-zinc-50">
-      <div className="max-w-2xl mx-auto px-6 py-12 space-y-8">
+    <div className="max-w-2xl space-y-8">
 
         {/* Page header */}
         <div>
           <h1 className="text-xl font-medium text-zinc-900">Verify Receipt</h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Paste a signed receipt to verify the Ed25519 signature against the platform public key.
+            Inspect a signed receipt. For cryptographic verification, use the MCP verify_receipt tool.
           </p>
         </div>
 
@@ -85,7 +85,7 @@ export function VerifyPage() {
               <h2 className="text-lg font-medium text-zinc-900">Receipt Fields</h2>
               {hasSignature ? (
                 <Badge variant="outline" className="border-zinc-300 text-zinc-600">
-                  Signature present
+                  Signature found
                 </Badge>
               ) : (
                 <Badge variant="outline" className="border-red-300 text-red-600">
@@ -192,18 +192,17 @@ export function VerifyPage() {
                   </code>{' '}
                   MCP tool with this receipt ID.
                 </span>
-                <a
-                  href={`/sessions?receipt=${receipt.receipt_id}`}
+                <Link
+                  to="/sessions"
                   className="text-xs font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
                 >
                   View session
-                </a>
+                </Link>
               </div>
             )}
           </div>
         )}
 
-      </div>
     </div>
   )
 }

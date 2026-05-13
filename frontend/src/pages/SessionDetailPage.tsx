@@ -118,7 +118,7 @@ function AuditTimeline({ entries, liveEventCount }: { entries: AuditLogEntry[], 
           // The first liveEventCount entries in the reversed array are the freshly arrived WS events.
           const isLive = i < liveEventCount
           return (
-            <li key={i} className="border-l-2 border-zinc-200 pl-4 py-2 ml-2">
+            <li key={`${entry.timestamp}|${entry.event}`} className="border-l-2 border-zinc-200 pl-4 py-2 ml-2">
               <div className="flex items-center gap-3">
                 {isLive && (
                   // dot marks events that arrived live over WS and are not yet flushed to REST
@@ -306,7 +306,7 @@ export function SessionDetailPage() {
 
       {/* ── negotiation trail ──────────────────────────────────────────────── */}
       <section>
-        <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 mb-3">
+        <h2 className="text-sm font-medium text-zinc-600 mb-3">
           Negotiation Trail
         </h2>
         <NegotiationTable rounds={session.rounds} />
@@ -315,7 +315,7 @@ export function SessionDetailPage() {
       {/* ── audit log ─────────────────────────────────────────────────────── */}
       <section>
         <div className="flex items-center gap-3 mb-3">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+          <h2 className="text-sm font-medium text-zinc-600">
             Audit Log ({mergedAuditLog.length})
           </h2>
           {session.status === 'pending' && <WsStatusBadge status={wsStatus} />}
@@ -326,7 +326,7 @@ export function SessionDetailPage() {
       {/* ── signed receipt ─────────────────────────────────────────────────── */}
       {signed_receipt && (
         <section>
-          <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 mb-3">
+          <h2 className="text-sm font-medium text-zinc-600 mb-3">
             Signed Receipt
           </h2>
           <ReceiptCard receipt={signed_receipt} />

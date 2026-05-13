@@ -4,11 +4,16 @@ Endpoints:
   POST /agents/register           — register a new agent
   POST /agents/delegate           — owner signs spending policy
   GET  /agents/{id}/spend         — get agent's daily spend summary
+  GET  /agents/{id}/pubkey        — fetch agent's Ed25519 public key
+  GET  /.well-known/platform-pubkey — platform's Ed25519 public key
   POST /commerce/negotiate        — run single negotiation session (Idempotency-Key required)
   POST /commerce/auction          — run multi-merchant auction       (Idempotency-Key required)
   GET  /commerce/sessions         — list all sessions
   GET  /commerce/session/{id}     — session detail + audit log
+  POST /commerce/checkout/{id}    — create Razorpay order for settled session (Idempotency-Key required)
   POST /commerce/revoke/{id}      — revoke/cancel a session
+  POST /webhooks/razorpay         — receive Razorpay payment webhook events
+  WS   /ws/session/{id}           — real-time session event stream
   GET  /health                    — health check
 """
 
@@ -937,6 +942,10 @@ async def razorpay_webhook(request: Request, db: AsyncSession = Depends(get_db))
         return {"status": "ok"}
 
     if razorpay_payment_id:
+        # Idempotency guard: Razorpay retries the same webhook on network errors.
+        # If we've already recorded this exact payment, skip the write.
+        if receipt.razorpay_payment_id and receipt.razorpay_payment_id == razorpay_payment_id:
+            return {"status": "ok"}  # already processed this payment
         receipt.razorpay_payment_id = razorpay_payment_id
         db.add(receipt)
 

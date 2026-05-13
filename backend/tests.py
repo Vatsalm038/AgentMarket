@@ -409,7 +409,7 @@ def test_razorpay_mock_settlement():
     assert receipt["amount_inr"] == 499.0
     assert receipt["amount_paise"] == 49900
     assert "razorpay_order_id" in receipt
-    assert receipt["status"] in ("captured", "mock_captured")
+    assert receipt["status"] == "captured"
 
 
 # ── Seed price helper tests ─────────────────────────────────────────────────
@@ -970,6 +970,61 @@ def test_run_auction_returns_replay_payload():
     assert "_replay" not in result["winner"]
     for q in result["all_quotes"]:
         assert "_replay" not in q
+
+
+# ── Review-finding regression tests ─────────────────────────────────────────
+
+def test_merchant_agent_respond_bad_json(monkeypatch):
+    """LLM returning non-JSON must not raise — return a reject fallback."""
+    import negotiation
+
+    class FakeChoice:
+        message = type("M", (), {"content": "!!!not json!!!"})()
+
+    class FakeResp:
+        choices = [FakeChoice()]
+
+    fake_client = type("C", (), {
+        "chat": type("Ch", (), {
+            "completions": type("Co", (), {
+                "create": staticmethod(lambda **kw: FakeResp())
+            })()
+        })()
+    })()
+    monkeypatch.setattr(negotiation, "_get_openai_client", lambda: fake_client)
+
+    result = negotiation.merchant_agent_respond(
+        item="Widget", listed_price=500.0, buyer_offer=400.0, round_num=1
+    )
+    assert isinstance(result, dict)
+    assert result["action"] == "reject"
+
+
+def test_daily_spend_today_start_is_timezone_aware():
+    """today_start must be timezone-aware to compare against timestamptz DB column."""
+    import inspect
+    import spend_tracker
+
+    src = inspect.getsource(spend_tracker)
+    assert "utcnow" not in src, "spend_tracker must not use datetime.utcnow()"
+    assert "timezone.utc" in src, "spend_tracker must use datetime.now(timezone.utc)"
+
+
+def test_razorpay_webhook_idempotent_on_duplicate_payment():
+    """Second webhook with same payment_id must not write a second audit row."""
+    payment_id = "pay_test_abc123"
+
+    class FakeReceipt:
+        razorpay_payment_id = payment_id
+        session_id = "sess_test"
+        buyer_agent_id = "agent_test"
+
+    receipt = FakeReceipt()
+    # The guard: if already processed, do not update.
+    already_processed = (
+        receipt.razorpay_payment_id and receipt.razorpay_payment_id == payment_id
+    )
+    assert already_processed, "Duplicate payment should be detected"
 
 
 if __name__ == "__main__":

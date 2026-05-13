@@ -79,13 +79,11 @@ export function ReplayPage() {
   // ── Loading ──
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-zinc-50 p-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="h-6 w-40 bg-zinc-100 rounded-md animate-pulse mb-8" />
-          <div className="grid grid-cols-2 gap-6">
-            <div className="h-64 bg-zinc-100 rounded-md animate-pulse" />
-            <div className="h-64 bg-zinc-100 rounded-md animate-pulse" />
-          </div>
+      <div className="space-y-6">
+        <div className="h-6 w-40 bg-zinc-100 rounded-md animate-pulse" />
+        <div className="grid grid-cols-2 gap-6">
+          <div className="h-64 bg-zinc-100 rounded-md animate-pulse" />
+          <div className="h-64 bg-zinc-100 rounded-md animate-pulse" />
         </div>
       </div>
     )
@@ -94,11 +92,7 @@ export function ReplayPage() {
   // ── Error / missing ──
   if (isError || !data) {
     return (
-      <div className="min-h-screen bg-zinc-50 p-8">
-        <div className="max-w-5xl mx-auto">
-          <p className="text-sm text-zinc-500">Session not found.</p>
-        </div>
-      </div>
+      <p className="text-sm text-zinc-500">Session not found.</p>
     )
   }
 
@@ -106,9 +100,9 @@ export function ReplayPage() {
   const rd: ReplayData | null = isReplayData(replay_data) ? replay_data : null
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <>
       {/* ── Top bar ── */}
-      <div className="bg-white border-b border-zinc-200 px-8 py-4">
+      <div className="bg-white border-b border-zinc-200 -mx-6 -mt-8 px-8 py-4">
         <div className="max-w-5xl mx-auto">
           {/* Back link */}
           <Link
@@ -148,14 +142,14 @@ export function ReplayPage() {
       </div>
 
       {/* ── Body ── */}
-      <div className="max-w-5xl mx-auto px-8 py-8">
+      <div className="py-8">
 
         {/* Two-column layout */}
         <div className="grid grid-cols-2 gap-6">
 
           {/* Left — Original run */}
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 mb-3">
+            <p className="text-sm font-medium text-zinc-600 mb-3">
               Original
             </p>
 
@@ -190,7 +184,7 @@ export function ReplayPage() {
 
           {/* Right — Replay (simulated) */}
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 mb-3">
+            <p className="text-sm font-medium text-zinc-600 mb-3">
               Replay
             </p>
 
@@ -216,7 +210,7 @@ export function ReplayPage() {
         {/* ── Buyer evaluation (full width) ── */}
         {rd?.buyer_evaluation && (
           <div className="mt-10">
-            <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 mb-3">
+            <p className="text-sm font-medium text-zinc-600 mb-3">
               Buyer Evaluation
             </p>
 
@@ -237,6 +231,6 @@ export function ReplayPage() {
           </div>
         )}
       </div>
-    </div>
+    </>
   )
 }

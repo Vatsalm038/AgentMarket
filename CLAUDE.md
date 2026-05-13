@@ -101,17 +101,10 @@ not personas. Currently configured:
 
 ## Active context
 
-**Calendar day:** 2026-05-12 (Tue, Day 5 of 16). Days 1 + 2.1-2.3 shipped and pushed. Day 2 ticket 2.4-2.9 implemented but **UNCOMMITTED IN WORKING TREE** — never code-reviewed, no live MCP smoke test yet. User stopped mid-batch.
-**Current ticket:** Resume by code-reviewing the uncommitted 2.4-2.9 batch, running an MCP smoke test, writing docs/mcp-setup.md (2.10), updating day-plan.md + backlog.md, then commit. Detailed pickup list in `~/.claude/projects/-home-vatsal-personal-agent-market/memory/resume_day2_2.4-2.10.md`.
-**Last decision:** Folded two backlog Tier 1.2 items into 2.6/2.7 batch — `GET /agents/{id}/pubkey` and enriched `GET /commerce/session/{id}` shipped with the MCP tools. ADR-007 verifiable replay now actually persists prompts in `negotiation_sessions.replay_data`.
-**Working tree (uncommitted, 45/45 tests passing):**
-- backend/auction.py — replay capture added
-- backend/main.py — pubkey endpoint, /well-known/platform-pubkey, enriched session GET
-- backend/models.py — PlatformKey table, replay_data column
-- backend/tests.py — +2 tests (now 45 total)
-- mcp_server/server.py — full rewrite, 6 tools + in-memory demo identity
-- backend/migrations/versions/c3d4e5f6a7b8_platform_keys.py — already applied locally
-**Blockers:** None. The uncommitted code passes tests; just needs review pass, MCP live smoke (curl one tool end-to-end), and the 2.10 setup doc before commit.
+**Calendar day:** 2026-05-13 (Wed, Day 5 of 16). Days 1–4 fully committed and pushed. Frontend scaffold (Vite+React+TS+Tailwind+shadcn+TanStack Query) shipped in last commit.
+**Current ticket:** Pre-Day-5 deploy readiness — fixing documentation gaps (B6–B9, M7–M8), creating render.yaml, mcp_server/requirements.txt, scripts/bootstrap_production.sh, then Day 5 feature work.
+**Last decision:** Platform key is module-level in main.py (loaded from PLATFORM_PRIVATE_KEY_B64 env var on startup) — no PlatformKey DB table. ADR-007 verifiable replay persists prompts in negotiation_sessions.replay_data JSON column.
+**Working tree:** Clean (all days committed).
 
 **Environment notes**
 - Python 3.12 venv at `/home/vatsal/personal/agent-market/.venv` (gitignored)

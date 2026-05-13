@@ -6,11 +6,14 @@ Module 2: A2A Negotiation Protocol
 - Every round is logged to audit trail
 """
 
-import uuid
 import json
-from datetime import datetime
+import logging
+import uuid
+from datetime import datetime, timezone
 from identity import validate_spend
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 # Lazy-init so importing this module doesn't require OPENAI_API_KEY at boot.
 _client: OpenAI | None = None
@@ -58,7 +61,12 @@ Respond ONLY with valid JSON, no markdown:
         messages=[{"role": "user", "content": prompt}]
     )
     raw = response.choices[0].message.content.strip()
-    result = json.loads(raw)
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        # LLM returned non-JSON — return a safe reject fallback rather than 500.
+        logger.warning("merchant_agent_respond: JSON parse failed, raw=%r", raw)
+        return {"action": "reject", "price": last_counter, "reason": "Parse error"}
 
     # Hard clamp in Python — merchant price must always come DOWN
     if result.get("price") and result["price"] > last_counter:
@@ -104,7 +112,12 @@ Respond ONLY with valid JSON, no markdown:
         messages=[{"role": "user", "content": prompt}]
     )
     raw = response.choices[0].message.content.strip()
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # LLM returned non-JSON — return a safe exit fallback rather than 500.
+        logger.warning("buyer_agent_counter: JSON parse failed, raw=%r", raw)
+        return {"action": "exit", "price": buyer_last_offer, "reason": "Parse error"}
 
 
 def run_negotiation(item: str, listed_price: float, initial_offer: float,
@@ -149,7 +162,7 @@ def run_negotiation(item: str, listed_price: float, initial_offer: float,
             "merchant_action": merchant_resp["action"],
             "merchant_price": merchant_resp["price"],
             "merchant_reason": merchant_resp["reason"],
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
         if merchant_resp["action"] == "accept":
@@ -216,7 +229,7 @@ def run_negotiation(item: str, listed_price: float, initial_offer: float,
         "rounds": rounds,
         "status": status,
         "buyer_agent_id": credential["agent_id"],
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat()
     }
 
 

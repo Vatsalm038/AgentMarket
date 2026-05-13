@@ -1,0 +1,45 @@
+databases:
+  - name: agentmarket-db
+    databaseName: agentdb
+    user: agentmarket
+    plan: starter
+
+services:
+  - type: web
+    name: agentmarket-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    plan: starter
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agentmarket-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: PLATFORM_PRIVATE_KEY_B64
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+  - type: web
+    name: agentmarket-mcp
+    runtime: python
+    rootDir: mcp_server
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    plan: starter
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          name: agentmarket-backend
+          type: web
+          property: host
+      - key: PYTHON_VERSION
+        value: 3.11.0

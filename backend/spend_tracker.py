@@ -4,7 +4,7 @@ Calculates how much an agent has spent today from the audit log.
 Used by negotiate endpoint before allowing any new transaction.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models import AuditLog
@@ -15,7 +15,7 @@ async def get_daily_spent(agent_id: str, db: AsyncSession) -> float:
     Sum all settled transaction amounts for an agent today (UTC).
     Reads from audit_log where event = 'payment_settled'.
     """
-    today_start = datetime.utcnow().replace(
+    today_start = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 
@@ -47,7 +47,7 @@ async def get_spend_summary(agent_id: str, db: AsyncSession) -> dict:
     - total all-time spend
     - number of settled transactions
     """
-    today_start = datetime.utcnow().replace(
+    today_start = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 

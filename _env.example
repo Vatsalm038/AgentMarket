@@ -10,6 +10,20 @@ OPENAI_API_KEY=sk-your-openai-key-here
 RAZORPAY_KEY_ID=rzp_test_your_test_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_test_secret
 
+# Platform Ed25519 keypair — generate once and pin so public key stays stable across deploys.
+# Generate: python3 -c "from cryptography.hazmat.primitives.asymmetric import ed25519; from cryptography.hazmat.primitives import serialization; import base64; k=ed25519.Ed25519PrivateKey.generate(); print(base64.b64encode(k.private_bytes(serialization.Encoding.Raw,serialization.PrivateFormat.Raw,serialization.NoEncryption())).decode())"
+PLATFORM_PRIVATE_KEY_B64=your_base64_ed25519_private_key_here
+
+# MCP server → backend URL (used by mcp_server/server.py)
+# Local dev: http://localhost:8000
+# Production (Render): https://your-backend-service.onrender.com
+BACKEND_URL=http://localhost:8000
+
+# Frontend → backend URL (used by Vite/axios in production)
+# Local dev: leave empty (Vite proxy handles /api → localhost:8000)
+# Production (Vercel): https://your-backend-service.onrender.com
+VITE_API_URL=
+
 # MCP server
 MCP_PORT=8001
 

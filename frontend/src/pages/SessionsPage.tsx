@@ -112,7 +112,7 @@ function SessionsTable({ sessions }: { sessions: SessionSummary[] }) {
               onClick={() => navigate(`/session/${s.session_id}`)}
             >
               {/* Session ID — mono, truncated */}
-              <td className="px-4 py-3 text-sm font-mono text-xs text-zinc-500">
+              <td className="px-4 py-3 font-mono text-xs text-zinc-500">
                 {s.session_id.slice(0, 12)}...{s.session_id.slice(-6)}
               </td>
 
@@ -139,7 +139,7 @@ function SessionsTable({ sessions }: { sessions: SessionSummary[] }) {
               </td>
 
               {/* Buyer agent — mono, truncated */}
-              <td className="px-4 py-3 text-sm font-mono text-xs text-zinc-500">
+              <td className="px-4 py-3 font-mono text-xs text-zinc-500">
                 {s.buyer_agent_id.slice(0, 12)}...{s.buyer_agent_id.slice(-6)}
               </td>
 
@@ -159,10 +159,9 @@ export function SessionsPage() {
   const { data, isLoading, isError, refetch } = useSessions()
 
   return (
-    <div className="min-h-screen bg-zinc-50">
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-medium text-zinc-900">Sessions</h1>
             <p className="text-sm text-zinc-600 mt-1">All negotiation sessions</p>
@@ -211,7 +210,6 @@ export function SessionsPage() {
         {!isLoading && !isError && data && data.length > 0 && (
           <SessionsTable sessions={data} />
         )}
-      </div>
     </div>
   )
 }

@@ -43,8 +43,7 @@ function CopyButton({ text }: { text: string }) {
 
 export function InstallMcpPage() {
   return (
-    <div className="min-h-screen bg-zinc-50">
-      <div className="max-w-3xl mx-auto px-6 py-12 space-y-10">
+    <div className="space-y-10">
 
         {/* Page header */}
         <div>
@@ -129,7 +128,6 @@ export function InstallMcpPage() {
           </div>
         </div>
 
-      </div>
     </div>
   )
 }

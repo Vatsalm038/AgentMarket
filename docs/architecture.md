@@ -1,5 +1,23 @@
 # Architecture
 
+## Current Implementation (MVP)
+
+The backend uses a **flat layout under `backend/`** — the domain/adapters/api split described in the Target section below is the goal, not the current state. Layering will emerge post-MVP as modules grow large enough to justify splitting.
+
+Actual modules in `backend/`:
+- `main.py` — FastAPI app, all route definitions, startup (loads platform Ed25519 key from env)
+- `models.py` — SQLAlchemy ORM models (all tables in one file)
+- `database.py` — async engine + session factory
+- `identity.py` — Ed25519 keygen, policy signing, credential creation
+- `negotiation.py` — round-by-round negotiation with LLM + math clamps
+- `auction.py` — multi-merchant auction, replay data capture
+- `matcher.py` — semantic embedding + haversine + price filter
+- `spend_tracker.py` — per-policy daily/per-txn spend enforcement
+- `settlement.py` — signed receipt construction (Ed25519)
+- `razorpay_settlement.py` — Razorpay order create + webhook verify
+
+The MCP server lives in `mcp_server/server.py` as a single file. It imports `database` and `matcher` directly from the backend path (via `sys.path.insert`) so it can run DB queries without an HTTP round-trip for `search_local_merchants`. All other tools go over HTTP to the backend.
+
 ## High-level
 
 Single FastAPI backend orchestrates everything. Two entry points to the same backend:

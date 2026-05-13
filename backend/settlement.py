@@ -13,7 +13,7 @@ never has to re-canonicalize from columns.
 import uuid
 import json
 import base64
-from datetime import datetime
+from datetime import datetime, timezone
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.exceptions import InvalidSignature
 
@@ -41,7 +41,7 @@ def create_transaction(
         "item": session["item"],
         "amount": session["final_price"],
         "currency": credential["policy"]["currency"],
-        "settled_at": datetime.utcnow().isoformat(),
+        "settled_at": datetime.now(timezone.utc).isoformat(),
         "policy_id": credential["policy_id"],
     }
 
@@ -65,7 +65,7 @@ def build_audit_log(session: dict, transaction: dict | None) -> list[dict]:
             "agent_id": session["buyer_agent_id"],
             "event": event,
             "payload": payload,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
 
     log("session_started", {
