@@ -1,6 +1,7 @@
 import React from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useSession } from '@/hooks/useApi'
+import { useSession, useSessionWs, mergeAuditLog } from '@/hooks/useApi'
+import type { WsStatus } from '@/hooks/useApi'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { NegotiationRound, AuditLogEntry, SignedReceipt } from '@/types'
@@ -159,11 +160,45 @@ function ReceiptCard({ receipt }: { receipt: SignedReceipt }) {
   )
 }
 
+// ─── WS status badge ──────────────────────────────────────────────────────────
+
+// Maps WebSocket connection state to a small visual indicator.
+// "open" is deliberately understated (zinc) — it's the happy path.
+function WsStatusBadge({ status }: { status: WsStatus }) {
+  const label: Record<WsStatus, string> = {
+    connecting: 'connecting…',
+    open:       'live',
+    closed:     'disconnected',
+    error:      'ws error',
+  }
+  const cls: Record<WsStatus, string> = {
+    connecting: 'border-zinc-300 text-zinc-400',
+    open:       'border-zinc-400 text-zinc-600',
+    closed:     'border-zinc-300 text-zinc-400',
+    error:      'border-red-600 text-red-600',
+  }
+
+  return (
+    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${cls[status]}`}>
+      {/* dot indicator */}
+      <span
+        className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${
+          status === 'open' ? 'bg-green-600' :
+          status === 'error' ? 'bg-red-600' :
+          'bg-zinc-300'
+        }`}
+      />
+      {label[status]}
+    </Badge>
+  )
+}
+
 // ─── page ─────────────────────────────────────────────────────────────────────
 
 export function SessionDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const { data, isLoading, isError } = useSession(id)
+  const { liveEvents, wsStatus } = useSessionWs(id)
 
   if (isLoading) return (
     <div className="p-8 max-w-4xl mx-auto">
@@ -178,6 +213,9 @@ export function SessionDetailPage() {
   )
 
   const { session, audit_log, signed_receipt, replay_data } = data
+  // Merge REST audit_log with any live WS events that haven't been persisted yet.
+  // This keeps the timeline complete even before the next REST refetch fires.
+  const mergedAuditLog = mergeAuditLog(audit_log, liveEvents)
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-8">
@@ -208,7 +246,11 @@ export function SessionDetailPage() {
         </div>
 
         <div className="flex flex-col items-end gap-2 shrink-0">
-          <Badge variant="outline" className={statusClass(session.status)}>{session.status}</Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className={statusClass(session.status)}>{session.status}</Badge>
+            {/* Only show WS badge while the session is pending — once settled the socket closes */}
+            {session.status === 'pending' && <WsStatusBadge status={wsStatus} />}
+          </div>
           <p className="text-xs text-zinc-400">{formatTs(session.created_at)}</p>
           {replay_data != null && (
             // replay_data presence means the full turn-by-turn log was captured (ADR-007)
@@ -232,7 +274,7 @@ export function SessionDetailPage() {
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 mb-3">
           Audit Log
         </h2>
-        <AuditTimeline entries={audit_log} />
+        <AuditTimeline entries={mergedAuditLog} />
       </section>
 
       {/* ── signed receipt ─────────────────────────────────────────────────── */}
