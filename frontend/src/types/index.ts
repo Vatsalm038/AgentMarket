@@ -12,14 +12,23 @@ export interface SessionSummary {
 
 // ─── GET /commerce/session/:id ───────────────────────────────────────────────
 
+// One auction round stored in negotiation_sessions.rounds JSON column
+export interface NegotiationRound {
+  round: number
+  type: string
+  quotes: Record<string, unknown>[]
+  winner: Record<string, unknown> | null
+  timestamp: string
+}
+
 // The core session object returned nested inside SessionDetailResponse
 export interface SessionDetail {
   id: string
   item: string
-  status: string
+  status: 'pending' | 'settled' | 'revoked' | 'failed'
   listed_price: number
   final_price: number | null
-  rounds: unknown[]  // negotiation round objects — typed more specifically in 3.4
+  rounds: NegotiationRound[]
   created_at: string
   settled_at: string | null
   policy_id: string | null
