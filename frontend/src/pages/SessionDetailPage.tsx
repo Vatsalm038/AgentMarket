@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useSession, useSessionWs, mergeAuditLog } from '@/hooks/useApi'
 import type { WsStatus } from '@/hooks/useApi'
@@ -100,32 +100,66 @@ function NegotiationTable({ rounds }: { rounds: NegotiationRound[] }) {
   )
 }
 
-function AuditTimeline({ entries }: { entries: AuditLogEntry[] }) {
+function AuditTimeline({ entries, liveEventCount }: { entries: AuditLogEntry[], liveEventCount: number }) {
+  const [showAll, setShowAll] = useState(false)
+
   if (entries.length === 0) {
     return <p className="text-sm text-zinc-500 py-4">No audit events.</p>
   }
 
+  // Reverse so most-recent event is first; live events land at the top of the reversed slice.
+  const reversed = [...entries].reverse()
+  const visible = showAll ? reversed : reversed.slice(0, 5)
+
   return (
-    <ol className="space-y-3">
-      {entries.map((entry, i) => (
-        <li key={i} className="border-l-2 border-zinc-200 pl-4 py-1 ml-2">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-zinc-800">{entry.event}</span>
-            <span className="font-mono text-xs text-zinc-400">{formatTs(entry.timestamp)}</span>
-          </div>
-          {entry.payload && (
-            // collapsible raw payload — useful for debugging without cluttering the audit trail
-            <details className="mt-1">
-              <summary className="text-xs text-zinc-400 cursor-pointer select-none">payload</summary>
-              <pre className="mt-1 font-mono text-xs text-zinc-500 whitespace-pre-wrap break-all">
-                {JSON.stringify(entry.payload, null, 2)}
-              </pre>
-            </details>
-          )}
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol className="space-y-1">
+        {visible.map((entry, i) => {
+          // The first liveEventCount entries in the reversed array are the freshly arrived WS events.
+          const isLive = i < liveEventCount
+          return (
+            <li key={i} className="border-l-2 border-zinc-200 pl-4 py-2 ml-2">
+              <div className="flex items-center gap-3">
+                {isLive && (
+                  // dot marks events that arrived live over WS and are not yet flushed to REST
+                  <span className="text-green-600 text-xs select-none">●</span>
+                )}
+                <span className="text-sm font-mono font-medium text-zinc-800">{entry.event}</span>
+                <span className="font-mono text-xs text-zinc-400">{formatTs(entry.timestamp)}</span>
+              </div>
+              {entry.payload && (
+                // collapsible raw payload — useful for debugging without cluttering the audit trail
+                <details className="mt-1">
+                  <summary className="text-xs text-zinc-400 cursor-pointer select-none">payload</summary>
+                  <pre className="mt-2 font-mono text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-md p-3 whitespace-pre-wrap break-all">
+                    {JSON.stringify(entry.payload, null, 2)}
+                  </pre>
+                </details>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+      {entries.length > 5 && (
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className="mt-3 text-xs text-zinc-500 hover:text-zinc-800 underline underline-offset-2 transition-colors"
+        >
+          {showAll ? 'Show fewer' : `Show all ${entries.length} events`}
+        </button>
+      )}
+    </>
   )
+}
+
+function downloadReceipt(receipt: SignedReceipt) {
+  const blob = new Blob([JSON.stringify(receipt, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `receipt-${receipt.receipt_id.slice(0, 12)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function ReceiptCard({ receipt }: { receipt: SignedReceipt }) {
@@ -155,6 +189,13 @@ function ReceiptCard({ receipt }: { receipt: SignedReceipt }) {
       <div className="border-t border-zinc-100 pt-4 space-y-1">
         <p className="text-xs text-zinc-500 uppercase tracking-wide font-medium">Ed25519 Signature</p>
         <p className="font-mono text-xs text-zinc-400 break-all">{receipt.signature_b64}</p>
+      </div>
+
+      {/* Download the full signed receipt as JSON for offline / auditor verification */}
+      <div className="border-t border-zinc-100 pt-4 flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => downloadReceipt(receipt)}>
+          Download receipt (.json)
+        </Button>
       </div>
     </div>
   )
@@ -216,6 +257,8 @@ export function SessionDetailPage() {
   // Merge REST audit_log with any live WS events that haven't been persisted yet.
   // This keeps the timeline complete even before the next REST refetch fires.
   const mergedAuditLog = mergeAuditLog(audit_log, liveEvents)
+  // liveAuditCount = how many entries in mergedAuditLog came from WS (not yet in the REST snapshot)
+  const liveAuditCount = mergedAuditLog.length - audit_log.length
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-8">
@@ -271,10 +314,13 @@ export function SessionDetailPage() {
 
       {/* ── audit log ─────────────────────────────────────────────────────── */}
       <section>
-        <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 mb-3">
-          Audit Log
-        </h2>
-        <AuditTimeline entries={mergedAuditLog} />
+        <div className="flex items-center gap-3 mb-3">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+            Audit Log ({mergedAuditLog.length})
+          </h2>
+          {session.status === 'pending' && <WsStatusBadge status={wsStatus} />}
+        </div>
+        <AuditTimeline entries={mergedAuditLog} liveEventCount={liveAuditCount} />
       </section>
 
       {/* ── signed receipt ─────────────────────────────────────────────────── */}

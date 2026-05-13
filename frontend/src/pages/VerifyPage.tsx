@@ -2,15 +2,18 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-// Receipt fields we know how to display from the signed payload
+// Receipt fields matching the backend settled_transactions shape
 interface ParsedReceipt {
   receipt_id?: string
   policy_id?: string
-  amount?: string | number
-  buyer_agent?: string
-  merchant_agent?: string
+  amount_inr?: number
+  buyer_agent_id?: string
+  merchant_agent_id?: string
   signature_b64?: string
   signed_payload_b64?: string
+  payload_json?: string
+  razorpay_order_id?: string
+  razorpay_payment_id?: string
   created_at?: string
   [key: string]: unknown
 }
@@ -81,12 +84,11 @@ export function VerifyPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-medium text-zinc-900">Receipt Fields</h2>
               {hasSignature ? (
-                // secondary variant gives bg-zinc-100; override text color to zinc-600 per spec
-                <Badge variant="secondary" className="text-zinc-600">
+                <Badge variant="outline" className="border-zinc-300 text-zinc-600">
                   Signature present
                 </Badge>
               ) : (
-                <Badge variant="outline" className="text-zinc-400">
+                <Badge variant="outline" className="border-red-300 text-red-600">
                   No signature
                 </Badge>
               )}
@@ -105,22 +107,35 @@ export function VerifyPage() {
                   <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.policy_id}</dd>
                 </>
               )}
-              {receipt.amount !== undefined && (
+              {receipt.amount_inr !== undefined && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Amount</dt>
-                  <dd className="font-mono text-xs text-zinc-700">{String(receipt.amount)}</dd>
+                  {/* en-IN locale gives Indian comma grouping: 1,00,000 */}
+                  <dd className="font-mono text-xs text-zinc-700">₹{receipt.amount_inr.toLocaleString('en-IN')}</dd>
                 </>
               )}
-              {receipt.buyer_agent && (
+              {receipt.buyer_agent_id && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Buyer Agent</dt>
-                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.buyer_agent}</dd>
+                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.buyer_agent_id}</dd>
                 </>
               )}
-              {receipt.merchant_agent && (
+              {receipt.merchant_agent_id && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Merchant Agent</dt>
-                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.merchant_agent}</dd>
+                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.merchant_agent_id}</dd>
+                </>
+              )}
+              {receipt.razorpay_order_id && (
+                <>
+                  <dt className="text-zinc-500 font-medium whitespace-nowrap">Razorpay Order</dt>
+                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.razorpay_order_id}</dd>
+                </>
+              )}
+              {receipt.razorpay_payment_id && (
+                <>
+                  <dt className="text-zinc-500 font-medium whitespace-nowrap">Razorpay Payment</dt>
+                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.razorpay_payment_id}</dd>
                 </>
               )}
               {receipt.signature_b64 && (
@@ -140,6 +155,25 @@ export function VerifyPage() {
               )}
             </dl>
 
+            {/* Expandable raw payload — useful for debugging / auditing */}
+            {receipt.payload_json && (
+              <details className="mt-2">
+                <summary className="text-xs text-zinc-500 cursor-pointer select-none hover:text-zinc-700">
+                  Raw payload_json
+                </summary>
+                <pre className="mt-2 text-xs font-mono bg-zinc-50 border border-zinc-200 rounded-md p-3 overflow-x-auto text-zinc-700 whitespace-pre-wrap break-all">
+                  {(() => {
+                    try {
+                      return JSON.stringify(JSON.parse(receipt.payload_json!), null, 2)
+                    } catch {
+                      // Not valid JSON — render as-is
+                      return receipt.payload_json
+                    }
+                  })()}
+                </pre>
+              </details>
+            )}
+
             <p className="text-xs text-zinc-500 mt-4">
               To cryptographically verify: run{' '}
               <code className="font-mono bg-zinc-100 px-1 py-0.5 rounded">
@@ -147,6 +181,25 @@ export function VerifyPage() {
               </code>{' '}
               via the AgentMarket MCP tool.
             </p>
+
+            {/* Footer: deep-link to session + MCP hint, only when receipt_id is known */}
+            {receipt.receipt_id && (
+              <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
+                <span className="text-xs text-zinc-400">
+                  View session or run{' '}
+                  <code className="font-mono bg-zinc-100 px-1 py-0.5 rounded text-zinc-600">
+                    get_session
+                  </code>{' '}
+                  MCP tool with this receipt ID.
+                </span>
+                <a
+                  href={`/sessions?receipt=${receipt.receipt_id}`}
+                  className="text-xs font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
+                >
+                  View session
+                </a>
+              </div>
+            )}
           </div>
         )}
 
