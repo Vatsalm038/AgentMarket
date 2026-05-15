@@ -1,12 +1,12 @@
 databases:
-  - name: agentmarket-db
+  - name: signeddeals-db
     databaseName: agentdb
     user: agentmarket
     plan: starter
 
 services:
   - type: web
-    name: agentmarket-backend
+    name: signeddeals-backend
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -15,7 +15,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: agentmarket-db
+          name: signeddeals-db
           property: connectionString
       - key: OPENAI_API_KEY
         sync: false
@@ -25,21 +25,11 @@ services:
         sync: false
       - key: PLATFORM_PRIVATE_KEY_B64
         sync: false
-      - key: PYTHON_VERSION
-        value: 3.11.0
-
-  - type: web
-    name: agentmarket-mcp
-    runtime: python
-    rootDir: mcp_server
-    buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
-    plan: starter
-    envVars:
-      - key: BACKEND_URL
-        fromService:
-          name: agentmarket-backend
-          type: web
-          property: host
+      - key: JWT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: PLATFORM_FEE_PCT
+        value: "0.025"
       - key: PYTHON_VERSION
         value: 3.11.0

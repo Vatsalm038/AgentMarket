@@ -32,6 +32,30 @@ from sqlalchemy.orm import declarative_base
 Base = declarative_base()
 
 
+class User(Base):
+    """Top-level auth entity (ADR-012). Replaces the old implicit buyers concept.
+
+    password_hash stores a bcrypt digest — plain text is never stored (CLAUDE.md rule 7).
+    google_id is nullable; Google OAuth ships post-MVP.
+    A single user can be both a buyer and a merchant (is_buyer + is_merchant flags).
+    """
+    __tablename__ = "users"
+    id = Column(UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                primary_key=True, default=uuid.uuid4)
+    email = Column(Text, nullable=False, unique=True)
+    password_hash = Column(Text, nullable=False)
+    google_id = Column(Text, nullable=True)
+    is_buyer = Column(Boolean, server_default=text("true"), nullable=False)
+    is_merchant = Column(Boolean, server_default=text("false"), nullable=False)
+    created_at = Column(DateTime(timezone=True),
+                        server_default=text("now()"), nullable=False)
+
+    __table_args__ = (
+        Index("ix_users_email", "email"),
+    )
+
+
 class AgentRole(str, enum.Enum):
     USER_AGENT = "user_agent"
     MERCHANT_AGENT = "merchant_agent"
@@ -43,6 +67,8 @@ class TxnStatus(str, enum.Enum):
     SETTLED = "settled"
     REJECTED = "rejected"
     REVOKED = "revoked"
+    PAY_LATER = "pay_later"
+    PAYMENT_INITIATED = "payment_initiated"
 
 
 # create_type=False because the migration already creates the PG ENUM types;
@@ -59,6 +85,10 @@ class Agent(Base):
     role = Column(_AGENT_ROLE, nullable=False)
     public_key = Column(LargeBinary, nullable=False)
     owner_id = Column(String, nullable=False)
+    # ADR-012: nullable FK to users; existing rows (incl. MCP demo agent) left NULL.
+    owner_user_id = Column(UUID(as_uuid=True),
+                           ForeignKey("users.id", ondelete="SET NULL"),
+                           nullable=True)
     created_at = Column(DateTime(timezone=True),
                         server_default=text("now()"), nullable=False)
 
@@ -66,6 +96,7 @@ class Agent(Base):
         CheckConstraint("octet_length(public_key) = 32",
                         name="agents_pubkey_ed25519_len"),
         Index("ix_agents_owner_id", "owner_id"),
+        Index("ix_agents_owner_user_id", "owner_user_id"),
     )
 
 
@@ -79,12 +110,17 @@ class Merchant(Base):
     lat = Column(Float, nullable=False)
     lng = Column(Float, nullable=False)
     phone = Column(String(20), nullable=True)
+    # ADR-012: nullable FK to users; seeded merchants have no user owner for MVP.
+    owner_user_id = Column(UUID(as_uuid=True),
+                           ForeignKey("users.id", ondelete="SET NULL"),
+                           nullable=True)
     created_at = Column(DateTime(timezone=True),
                         server_default=text("now()"), nullable=False)
 
     __table_args__ = (
         Index("ix_merchants_city", "city"),
         Index("ix_merchants_pincode", "pincode"),
+        Index("ix_merchants_owner_user_id", "owner_user_id"),
     )
 
 
@@ -130,6 +166,8 @@ class Product(Base):
     listed_price = Column(Numeric(12, 2), nullable=False)
     floor_price = Column(Numeric(12, 2), nullable=False)
     category = Column(String, nullable=False)
+    # ADR-012: nullable; Cloudflare R2 presigned upload ships post-MVP.
+    image_url = Column(Text, nullable=True)
     embedding = Column(JSONB, nullable=True)
     embedding_model = Column(String, nullable=True)
     embedding_generated_at = Column(DateTime(timezone=True), nullable=True)
@@ -200,6 +238,8 @@ class NegotiationSession(Base):
     replay_model = Column(String, nullable=True)
     replay_seed = Column(BigInteger, nullable=True)
     replay_prompt_hash = Column(String(64), nullable=True)
+    # ADR-012: pay_later flow — "Pay Now" creates Razorpay order on demand.
+    pay_later_due_date = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True),
                         server_default=text("now()"), nullable=False)
     settled_at = Column(DateTime(timezone=True), nullable=True)
@@ -231,6 +271,9 @@ class SignedReceipt(Base):
     agent_signature = Column(LargeBinary, nullable=False)
     razorpay_order_id = Column(String, nullable=True)
     razorpay_payment_id = Column(String, nullable=True)
+    # ADR-012: platform fee stored here; computed in Python, never trusted to LLM.
+    platform_fee_paise = Column(Integer, nullable=True)
+    platform_fee_pct = Column(Numeric(6, 4), nullable=True)
     created_at = Column(DateTime(timezone=True),
                         server_default=text("now()"), nullable=False)
 

@@ -48,47 +48,52 @@ export function VerifyPage() {
 
         {/* Page header */}
         <div>
-          <h1 className="text-xl font-medium text-zinc-900">Verify Receipt</h1>
-          <p className="mt-1 text-sm text-zinc-600">
+          <h1 className="text-xl font-medium text-zinc-100">Verify Receipt</h1>
+          <p className="mt-1 text-sm text-zinc-500">
             Inspect a signed receipt. For cryptographic verification, use the MCP verify_receipt tool.
           </p>
         </div>
 
         {/* Input card */}
-        <div className="bg-white border border-zinc-200 rounded-md px-6 py-5 space-y-4">
+        <div className="bg-zinc-800 border border-zinc-700 rounded-md px-6 py-5 space-y-4">
           <div>
-            <label htmlFor="receipt-input" className="block text-sm font-medium text-zinc-700 mb-2">
+            <label htmlFor="receipt-input" className="block text-sm font-medium text-zinc-300 mb-2">
               Receipt JSON
             </label>
+            {/* Dark textarea — bg-zinc-950 gives the deepest well, matching code block aesthetic */}
             <textarea
               id="receipt-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Paste receipt JSON here..."
-              className="w-full h-48 font-mono text-xs border border-zinc-200 rounded-md p-3 bg-white focus:outline-none focus:ring-1 focus:ring-zinc-400 resize-y text-zinc-900 placeholder:text-zinc-400"
+              className="w-full h-48 font-mono text-xs border border-zinc-700 rounded-md p-3 bg-zinc-950 focus:outline-none focus:ring-1 focus:ring-zinc-500 resize-y text-zinc-300 placeholder:text-zinc-600"
             />
           </div>
-          <Button onClick={handleVerify} disabled={!input.trim()}>
+          <Button
+            onClick={handleVerify}
+            disabled={!input.trim()}
+            className="bg-zinc-100 hover:bg-white text-zinc-900 disabled:opacity-40"
+          >
             Verify
           </Button>
         </div>
 
         {/* Parse error */}
         {parseError && (
-          <p className="text-sm text-red-600">{parseError}</p>
+          <p className="text-sm text-red-500">{parseError}</p>
         )}
 
         {/* Result card */}
         {receipt && (
-          <div className="bg-white border border-zinc-200 rounded-md px-6 py-5 space-y-4">
+          <div className="bg-zinc-800 border border-zinc-700 rounded-md px-6 py-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-zinc-900">Receipt Fields</h2>
+              <h2 className="text-lg font-medium text-zinc-100">Receipt Fields</h2>
               {hasSignature ? (
-                <Badge variant="outline" className="border-zinc-300 text-zinc-600">
+                <Badge variant="outline" className="border-zinc-600 text-zinc-400">
                   Signature found
                 </Badge>
               ) : (
-                <Badge variant="outline" className="border-red-300 text-red-600">
+                <Badge variant="outline" className="border-red-600 text-red-500">
                   No signature
                 </Badge>
               )}
@@ -98,51 +103,51 @@ export function VerifyPage() {
               {receipt.receipt_id && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Receipt ID</dt>
-                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.receipt_id}</dd>
+                  <dd className="font-mono text-xs text-zinc-400 break-all">{receipt.receipt_id}</dd>
                 </>
               )}
               {receipt.policy_id && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Policy ID</dt>
-                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.policy_id}</dd>
+                  <dd className="font-mono text-xs text-zinc-400 break-all">{receipt.policy_id}</dd>
                 </>
               )}
               {receipt.amount_inr !== undefined && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Amount</dt>
                   {/* en-IN locale gives Indian comma grouping: 1,00,000 */}
-                  <dd className="font-mono text-xs text-zinc-700">₹{receipt.amount_inr.toLocaleString('en-IN')}</dd>
+                  <dd className="font-mono text-xs text-zinc-300">₹{receipt.amount_inr.toLocaleString('en-IN')}</dd>
                 </>
               )}
               {receipt.buyer_agent_id && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Buyer Agent</dt>
-                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.buyer_agent_id}</dd>
+                  <dd className="font-mono text-xs text-zinc-400 break-all">{receipt.buyer_agent_id}</dd>
                 </>
               )}
               {receipt.merchant_agent_id && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Merchant Agent</dt>
-                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.merchant_agent_id}</dd>
+                  <dd className="font-mono text-xs text-zinc-400 break-all">{receipt.merchant_agent_id}</dd>
                 </>
               )}
               {receipt.razorpay_order_id && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Razorpay Order</dt>
-                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.razorpay_order_id}</dd>
+                  <dd className="font-mono text-xs text-zinc-400 break-all">{receipt.razorpay_order_id}</dd>
                 </>
               )}
               {receipt.razorpay_payment_id && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Razorpay Payment</dt>
-                  <dd className="font-mono text-xs text-zinc-700 break-all">{receipt.razorpay_payment_id}</dd>
+                  <dd className="font-mono text-xs text-zinc-400 break-all">{receipt.razorpay_payment_id}</dd>
                 </>
               )}
               {receipt.signature_b64 && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Signature</dt>
                   {/* Truncate long base64 signatures for readability */}
-                  <dd className="font-mono text-xs text-zinc-700 break-all" title={receipt.signature_b64}>
+                  <dd className="font-mono text-xs text-zinc-400 break-all" title={receipt.signature_b64}>
                     {truncate(receipt.signature_b64)}
                   </dd>
                 </>
@@ -150,7 +155,7 @@ export function VerifyPage() {
               {receipt.created_at && (
                 <>
                   <dt className="text-zinc-500 font-medium whitespace-nowrap">Created At</dt>
-                  <dd className="font-mono text-xs text-zinc-700">{receipt.created_at}</dd>
+                  <dd className="font-mono text-xs text-zinc-400">{receipt.created_at}</dd>
                 </>
               )}
             </dl>
@@ -158,10 +163,10 @@ export function VerifyPage() {
             {/* Expandable raw payload — useful for debugging / auditing */}
             {receipt.payload_json && (
               <details className="mt-2">
-                <summary className="text-xs text-zinc-500 cursor-pointer select-none hover:text-zinc-700">
+                <summary className="text-xs text-zinc-500 cursor-pointer select-none hover:text-zinc-300 transition-colors">
                   Raw payload_json
                 </summary>
-                <pre className="mt-2 text-xs font-mono bg-zinc-50 border border-zinc-200 rounded-md p-3 overflow-x-auto text-zinc-700 whitespace-pre-wrap break-all">
+                <pre className="mt-2 text-xs font-mono bg-zinc-950 border border-zinc-700 rounded-md p-3 overflow-x-auto text-zinc-400 whitespace-pre-wrap break-all">
                   {(() => {
                     try {
                       return JSON.stringify(JSON.parse(receipt.payload_json!), null, 2)
@@ -174,9 +179,9 @@ export function VerifyPage() {
               </details>
             )}
 
-            <p className="text-xs text-zinc-500 mt-4">
+            <p className="text-xs text-zinc-600 mt-4">
               To cryptographically verify: run{' '}
-              <code className="font-mono bg-zinc-100 px-1 py-0.5 rounded">
+              <code className="font-mono bg-zinc-700 text-zinc-300 px-1 py-0.5 rounded">
                 verify_receipt(&quot;receipt_id&quot;)
               </code>{' '}
               via the AgentMarket MCP tool.
@@ -184,17 +189,17 @@ export function VerifyPage() {
 
             {/* Footer: deep-link to session + MCP hint, only when receipt_id is known */}
             {receipt.receipt_id && (
-              <div className="pt-4 border-t border-zinc-100 flex items-center justify-between">
-                <span className="text-xs text-zinc-400">
+              <div className="pt-4 border-t border-zinc-700 flex items-center justify-between">
+                <span className="text-xs text-zinc-600">
                   View session or run{' '}
-                  <code className="font-mono bg-zinc-100 px-1 py-0.5 rounded text-zinc-600">
+                  <code className="font-mono bg-zinc-700 text-zinc-300 px-1 py-0.5 rounded">
                     get_session
                   </code>{' '}
                   MCP tool with this receipt ID.
                 </span>
                 <Link
                   to="/sessions"
-                  className="text-xs font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
+                  className="text-xs font-medium text-zinc-400 underline underline-offset-2 hover:text-zinc-100 transition-colors"
                 >
                   View session
                 </Link>

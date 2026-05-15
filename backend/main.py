@@ -1,6 +1,9 @@
 """
-Main FastAPI application — Agentic Commerce Protocol
+Main FastAPI application — Agentic Commerce Protocol (SignedDeals, ADR-012)
 Endpoints:
+  POST /auth/register             — register user (email + password → JWT)
+  POST /auth/login                — login → JWT
+  GET  /auth/me                   — decode current JWT claims
   POST /agents/register           — register a new agent
   POST /agents/delegate           — owner signs spending policy
   GET  /agents/{id}/spend         — get agent's daily spend summary
@@ -46,7 +49,8 @@ from identity import (create_agent_credential, generate_agent_id, generate_keypa
                       sign_policy, validate_spend, verify_policy_signature)
 from models import (Agent, AgentRole, AgentSkill, AuditLog, IdempotencyKey, Merchant,
                     MerchantAgent, NegotiationSession, Product,
-                    SignedReceipt, SpendingPolicy, TxnStatus)
+                    SignedReceipt, SpendingPolicy, TxnStatus, User)
+from auth import UserPayload, create_access_token, get_current_user, hash_password, verify_password
 from negotiation import run_negotiation
 from razorpay_settlement import (settle_via_razorpay, create_razorpay_order,
                                  RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
@@ -193,6 +197,28 @@ class AuctionRequest(BaseModel):
 class RevokeRequest(BaseModel):
     owner_id: str
     reason: str = "Revoked by owner"
+
+
+# ADR-012 auth request/response models
+class AuthRegisterRequest(BaseModel):
+    email: str
+    password: str
+    is_buyer: bool = True
+    is_merchant: bool = False
+
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    email: str
+    is_buyer: bool
+    is_merchant: bool
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -444,6 +470,85 @@ async def save_session_and_audit(
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────────
+
+# ── /auth ────────────────────────────────────────────────────────────────────
+
+@app.post("/auth/register", response_model=AuthTokenResponse, status_code=201)
+async def auth_register(req: AuthRegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Register a new user and return a JWT.
+
+    Email uniqueness is enforced by a DB UNIQUE constraint — concurrent registrations
+    with the same email will get a 409. Password is bcrypt-hashed before storage;
+    the plain text never touches the DB.
+    """
+    # Check for existing email first for a clean 409 (rather than a 500 on
+    # the unique constraint violation at commit time).
+    existing = (await db.execute(select(User).where(User.email == req.email))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    user = User(
+        email=req.email,
+        password_hash=hash_password(req.password),
+        is_buyer=req.is_buyer,
+        is_merchant=req.is_merchant,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    token = create_access_token(
+        user_id=str(user.id),
+        email=user.email,
+        is_buyer=user.is_buyer,
+        is_merchant=user.is_merchant,
+    )
+    return AuthTokenResponse(
+        access_token=token,
+        user_id=str(user.id),
+        email=user.email,
+        is_buyer=user.is_buyer,
+        is_merchant=user.is_merchant,
+    )
+
+
+@app.post("/auth/login", response_model=AuthTokenResponse)
+async def auth_login(req: AuthLoginRequest, db: AsyncSession = Depends(get_db)):
+    """Verify credentials and return a JWT.
+
+    Intentionally returns 401 (not 404) on unknown email to avoid email enumeration.
+    """
+    user = (await db.execute(select(User).where(User.email == req.email))).scalar_one_or_none()
+    if not user or not verify_password(req.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_access_token(
+        user_id=str(user.id),
+        email=user.email,
+        is_buyer=user.is_buyer,
+        is_merchant=user.is_merchant,
+    )
+    return AuthTokenResponse(
+        access_token=token,
+        user_id=str(user.id),
+        email=user.email,
+        is_buyer=user.is_buyer,
+        is_merchant=user.is_merchant,
+    )
+
+
+@app.get("/auth/me", response_model=AuthTokenResponse)
+async def auth_me(current_user: UserPayload = Depends(get_current_user)):
+    """Return the decoded claims of the current JWT. Useful for frontend bootstrapping."""
+    return AuthTokenResponse(
+        # access_token is not re-issued here — caller already has it.
+        access_token="",
+        user_id=current_user.user_id,
+        email=current_user.email,
+        is_buyer=current_user.is_buyer,
+        is_merchant=current_user.is_merchant,
+    )
+
 
 @app.get("/health")
 async def health():

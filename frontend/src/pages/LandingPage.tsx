@@ -28,18 +28,18 @@ export function LandingPage() {
   const isUp = health.data?.status === 'ok'
   const badgeLabel = health.isLoading ? 'Checking...' : isUp ? 'API online' : 'API offline'
   const badgeClass = health.isLoading
-    ? 'border-zinc-300 text-zinc-500'
+    ? 'border-zinc-600 text-zinc-500'
     : isUp
-    ? 'border-green-600 text-green-700'
-    : 'border-red-600 text-red-700'
+    ? 'border-green-600 text-green-500'
+    : 'border-red-600 text-red-500'
 
   return (
     <div className="flex flex-col gap-0">
-      {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <section className="bg-white border-b border-zinc-200 -mx-6 -mt-8 px-6 py-16">
+      {/* ── Hero — zinc-950 per spec ─────────────────────────────────────────── */}
+      <section className="bg-zinc-950 border-b border-zinc-800 -mx-6 -mt-8 px-6 py-16">
         <div className="max-w-5xl mx-auto flex flex-col gap-6">
           <div className="flex items-start justify-between">
-            <h1 className="text-xl font-medium text-zinc-900 max-w-xl leading-snug">
+            <h1 className="text-xl font-medium text-zinc-100 max-w-xl leading-snug">
               Agentic commerce for Indian hyperlocal markets
             </h1>
             {/* Health badge — shows API reachability */}
@@ -47,44 +47,45 @@ export function LandingPage() {
               {badgeLabel}
             </Badge>
           </div>
-          <p className="text-sm text-zinc-600 max-w-lg leading-relaxed">
+          <p className="text-sm text-zinc-400 max-w-lg leading-relaxed">
             Buyers describe what they want. Merchants list what they have. AI agents negotiate
             on both sides — every spending decision cryptographically bounded by a signed
             policy with verifiable receipts.
           </p>
           <div className="flex gap-3 pt-2">
-            <Button asChild className="bg-zinc-900 hover:bg-zinc-700 text-white rounded-md">
+            {/* Primary CTA — zinc-100 bg is the "near-white" equivalent of near-black in dark mode */}
+            <Button asChild className="bg-zinc-100 hover:bg-white text-zinc-900 rounded-md font-medium">
               <Link to="/sessions">View Sessions</Link>
             </Button>
-            <Button asChild variant="outline" className="rounded-md border-zinc-200 text-zinc-700">
-              <Link to="/install-mcp">Install MCP</Link>
+            <Button asChild variant="ghost" className="rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
+              <Link to="/sessions">View Audit Log</Link>
             </Button>
           </div>
         </div>
       </section>
 
-      {/* ── Feature strip ───────────────────────────────────────────────── */}
+      {/* ── Feature strip ───────────────────────────────────────────────────── */}
       <section className="py-14">
-        <h2 className="text-lg font-medium text-zinc-900 mb-8">How it works</h2>
+        <h2 className="text-lg font-medium text-zinc-100 mb-8">How it works</h2>
         <div className="grid grid-cols-3 gap-4">
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="bg-white border border-zinc-200 rounded-md p-5 flex flex-col gap-2"
+              className="bg-zinc-800 border border-zinc-700 rounded-md p-5 flex flex-col gap-2"
             >
-              <span className="text-sm font-medium text-zinc-900">{f.title}</span>
-              <p className="text-sm text-zinc-600 leading-relaxed">{f.description}</p>
+              <span className="text-sm font-medium text-zinc-100">{f.title}</span>
+              <p className="text-sm text-zinc-400 leading-relaxed">{f.description}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── Audit strip ─────────────────────────────────────────────────── */}
-      <section className="bg-white border border-zinc-200 rounded-md px-6 py-8 flex items-center justify-between">
-        <p className="text-sm text-zinc-500">
+      {/* ── Audit strip ─────────────────────────────────────────────────────── */}
+      <section className="bg-zinc-800 border border-zinc-700 rounded-md px-6 py-8 flex items-center justify-between">
+        <p className="text-sm text-zinc-400">
           Every state change is written to an immutable audit log. No silent mutations.
         </p>
-        <Button asChild variant="outline" className="rounded-md border-zinc-200 text-zinc-700 text-sm">
+        <Button asChild variant="ghost" className="rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 text-sm">
           <Link to="/sessions">Audit sessions</Link>
         </Button>
       </section>

@@ -11,16 +11,16 @@ export function TableSkeleton({ rows = 5, cols = 6 }: { rows?: number; cols?: nu
   const widths = ['w-16', 'w-24', 'w-32']
 
   return (
-    <div className="border border-zinc-200 rounded-md overflow-hidden">
+    <div className="border border-zinc-700 rounded-md overflow-hidden">
       <table className="w-full">
         <tbody>
           {Array.from({ length: rows }).map((_, rowIndex) => (
-            <tr key={rowIndex} className="border-b border-zinc-100 last:border-0">
+            <tr key={rowIndex} className="border-b border-zinc-800 last:border-0">
               {Array.from({ length: cols }).map((_, colIndex) => {
                 const width = widths[(rowIndex * cols + colIndex) % 3]
                 return (
                   <td key={colIndex} className="px-4 py-3">
-                    <div className={`h-4 bg-zinc-100 rounded animate-pulse ${width}`} />
+                    <div className={`h-4 bg-zinc-700 rounded animate-pulse ${width}`} />
                   </td>
                 )
               })}
@@ -45,10 +45,15 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <p className="text-sm font-medium text-zinc-900 mb-1">{title}</p>
+      <p className="text-sm font-medium text-zinc-200 mb-1">{title}</p>
       <p className="text-sm text-zinc-500 mb-4">{description}</p>
       {action && (
-        <Button variant="secondary" size="sm" asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          asChild
+          className="border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+        >
           <Link to={action.href}>{action.label}</Link>
         </Button>
       )}
@@ -60,10 +65,10 @@ export function EmptyState({
 
 function statusClass(status: SessionSummary['status']): string {
   switch (status) {
-    case 'settled': return 'border-green-600 text-green-700'
-    case 'pending': return 'border-zinc-400 text-zinc-600'
+    case 'settled': return 'border-green-600 text-green-500'
+    case 'pending': return 'border-zinc-500 text-zinc-400'
     case 'revoked':
-    case 'failed':  return 'border-red-600 text-red-700'
+    case 'failed':  return 'border-red-600 text-red-500'
   }
 }
 
@@ -90,10 +95,10 @@ function SessionsTable({ sessions }: { sessions: SessionSummary[] }) {
   const navigate = useNavigate()
 
   return (
-    <div className="border border-zinc-200 rounded-md overflow-hidden">
+    <div className="border border-zinc-700 rounded-md overflow-hidden">
       <table className="w-full">
         <thead>
-          <tr className="bg-zinc-50 border-b border-zinc-200">
+          <tr className="bg-zinc-800 border-b border-zinc-700">
             {COLS.map((col) => (
               <th
                 key={col}
@@ -108,7 +113,7 @@ function SessionsTable({ sessions }: { sessions: SessionSummary[] }) {
           {sessions.map((s) => (
             <tr
               key={s.session_id}
-              className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer"
+              className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800 cursor-pointer transition-colors"
               onClick={() => navigate(`/session/${s.session_id}`)}
             >
               {/* Session ID — mono, truncated */}
@@ -117,7 +122,7 @@ function SessionsTable({ sessions }: { sessions: SessionSummary[] }) {
               </td>
 
               {/* Item */}
-              <td className="px-4 py-3 text-sm text-zinc-900">{s.item}</td>
+              <td className="px-4 py-3 text-sm text-zinc-200">{s.item}</td>
 
               {/* Status badge */}
               <td className="px-4 py-3 text-sm">
@@ -125,16 +130,16 @@ function SessionsTable({ sessions }: { sessions: SessionSummary[] }) {
               </td>
 
               {/* Listed price */}
-              <td className="px-4 py-3 text-sm tabular-nums text-zinc-900">
+              <td className="px-4 py-3 text-sm tabular-nums text-zinc-200">
                 {fmtPrice(s.listed_price)}
               </td>
 
               {/* Settled price */}
               <td className="px-4 py-3 text-sm tabular-nums">
                 {s.final_price !== null ? (
-                  <span className="text-zinc-900">{fmtPrice(s.final_price)}</span>
+                  <span className="text-zinc-200">{fmtPrice(s.final_price)}</span>
                 ) : (
-                  <span className="text-zinc-400">—</span>
+                  <span className="text-zinc-600">—</span>
                 )}
               </td>
 
@@ -144,7 +149,7 @@ function SessionsTable({ sessions }: { sessions: SessionSummary[] }) {
               </td>
 
               {/* Created at */}
-              <td className="px-4 py-3 text-sm text-zinc-600">{fmtDate(s.created_at)}</td>
+              <td className="px-4 py-3 text-sm text-zinc-500">{fmtDate(s.created_at)}</td>
             </tr>
           ))}
         </tbody>
@@ -163,13 +168,13 @@ export function SessionsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-medium text-zinc-900">Sessions</h1>
-            <p className="text-sm text-zinc-600 mt-1">All negotiation sessions</p>
+            <h1 className="text-xl font-medium text-zinc-100">Sessions</h1>
+            <p className="text-sm text-zinc-500 mt-1">All negotiation sessions</p>
           </div>
           {/* Refresh button — icon-only, ghost */}
           <button
             onClick={() => refetch()}
-            className="p-2 rounded-md text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors"
+            className="p-2 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
             aria-label="Refresh sessions"
           >
             {/* Inline SVG to avoid any icon library dependency */}

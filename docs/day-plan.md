@@ -68,20 +68,26 @@ passing, live MCP smoke test green. Pushed to GitHub for laptop-transition check
 - [x] 4.6 "Download signed receipt" button — 20m
 - [x] 4.7 /verify standalone page — 45m
 
-## Day 5 — Deploy + video + launch
+## Day 5 — Auth + schema pivot + deploy (ADR-012: SignedDeals)
 
+> ADR-012 (2026-05-15): Rebrand to SignedDeals. Drop MCP distribution. Add
+> `users` table with JWT auth (bcrypt + HS256). Three React surfaces: marketing,
+> buyer dashboard, merchant dashboard. Existing Ed25519/DID/auction/receipt
+> system unchanged. Razorpay stays test-mode throughout MVP.
+
+- [x] 5.0 ADR-012 implementation — users migration, auth.py, /auth routes, dark-theme frontend, render.yaml rebrand — 60m
 - [ ] 5.1 Postgres on Render paid tier — 20m
-- [ ] 5.2 Backend on Render — 30m
-- [ ] 5.3 MCP server on Render — 20m
-- [ ] 5.4 Frontend on Vercel — 20m
-- [ ] 5.5 Custom domain + DNS — 30m
-- [ ] 5.6 Run migrations + seed in production — 30m
-- [ ] 5.7 Smoke test all 4 MCP tools against production — 30m
-- [ ] 5.8 Record 3-min demo video (script in docs/demo-script.md) — 180m
-- [ ] 5.9 Edit video — 90m
-- [ ] 5.10 README rewrite with embedded GIF — 45m
-- [ ] 5.11 LinkedIn post — 30m
-- [ ] 5.12 Resume bullet — 15m
+- [ ] 5.2 Backend on Render (signeddeals-backend) — 30m
+- [ ] 5.3 Frontend on Vercel — 20m
+- [ ] 5.4 Custom domain + DNS — 30m
+- [ ] 5.5 Run migrations + seed in production — 30m
+- [ ] 5.6 Smoke test auth + auction endpoints against production — 30m
+- [ ] 5.7 Buyer dashboard: /buyer/sessions list + /buyer/session/:id detail — 120m
+- [ ] 5.8 Merchant dashboard: /merchant/products list + deal inbox — 90m
+- [ ] 5.9 Record 3-min demo video (script in docs/demo-script.md) — 180m
+- [ ] 5.10 Edit video — 90m
+- [ ] 5.11 README rewrite with embedded GIF — 45m
+- [ ] 5.12 LinkedIn post — 30m
 
 ---
 

@@ -114,3 +114,49 @@ unique constraint if so) to prevent shortlist duplication on join.
 ---
 
 _(append new ADRs below as decisions are made)_
+
+---
+
+## ADR-012 | 2026-05-15 | Accepted
+**Decision:** Rebrand to SignedDeals. Drop MCP server. Add `users` table as
+top-level auth entity with dual buyer/merchant roles. Multi-merchant auction
+(3-4 competing merchants) and full Ed25519/DID system remain unchanged.
+Razorpay stays in test mode throughout MVP — no live money. Three React surfaces:
+buyer dashboard, merchant dashboard, marketing website (shared Vite app,
+configurable post-MVP). Google OAuth, product/delivery-proof images (Cloudflare R2),
+custom skills, B2B Excel upload, blog CMS deferred to post-MVP.
+
+**Context:** C2C + SMB expansion. MCP dropped because web dashboard is the
+primary interface and a solo schedule cannot maintain two distribution paths.
+Multi-merchant auction stays because 3-4 competing agents is the core value
+demonstration — the negotiation trail must show real competition. Ed25519 + DID
+system is unchanged (signing, policy delegation, verifiable receipts all intact).
+Live Razorpay deferred pending legal/RBI review of AI-authorized UPI debits.
+
+**Consequences:**
+1. `users` table (UUID PK, email, bcrypt hash, google_id nullable, is_buyer bool,
+   is_merchant bool). Existing `agents.owner_id` string stays (signed payload
+   compat); `agents.owner_user_id UUID FK → users` added alongside it.
+   `buyers` table absorbed into `users`.
+2. JWT auth (python-jose, HS256). All `/commerce/*` routes gated behind JWT in
+   Phase 3 (after frontend is ready). New route groups: `/auth`, `/merchant`,
+   `/buyer`, `/skills`, `/payments`, `/admin`.
+3. New tables: `deliveries` (delivery tracking), `delivery_reminders`,
+   `subscribers`. Modified: `products` (image_url nullable, delivery fields),
+   `negotiation_sessions` (pay_later status, pay_later_due_date), `signed_receipts`
+   (platform_fee_paise, platform_fee_pct), `agent_skills` (owner_id, visibility),
+   `merchants` (owner_id FK → users).
+4. Platform fee: `PLATFORM_FEE_PCT` env var (default 2.5%). Python arithmetic at
+   settlement, stored in `signed_receipts.platform_fee_paise`. No Razorpay Route —
+   manual reconciliation for MVP.
+5. Pay later: status values `pay_later | payment_initiated` added to
+   `negotiation_sessions`. "Pay Now" creates Razorpay order on demand.
+6. Email via Resend API. 2 MVP templates: deal_closed, delivery_reminder.
+   Render cron job hits `POST /admin/send-reminders`.
+7. Frontend: three route groups sharing one Vite app — `/` (marketing),
+   `/buyer/*` (buyer dashboard), `/merchant/*` (merchant dashboard). Marketing
+   pages configurable/extractable post-MVP. Zinc dark theme for dashboards;
+   zinc-900 hero + white body sections for marketing.
+8. Image storage deferred. `image_url` columns added nullable; upload via
+   Cloudflare R2 presigned URLs ships post-MVP.
+9. mcp_server/ directory removed. render.yaml updated to single backend service.
