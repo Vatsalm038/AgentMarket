@@ -168,6 +168,7 @@ app.include_router(buyer_router)
 class RegisterAgentRequest(BaseModel):
     owner_id: str
     role: str = "user_agent"
+    owner_user_id: str | None = None  # set by frontend when user is authenticated
 
 
 class DelegateRequest(BaseModel):
@@ -197,6 +198,7 @@ class AuctionRequest(BaseModel):
     num_merchants: int = 3
     buyer_priorities: str = "lowest price"
     use_razorpay: bool = True
+    max_budget_inr: float | None = None  # buyer's UI max price — caps policy_max
 
 
 class RevokeRequest(BaseModel):
@@ -560,6 +562,53 @@ async def health():
     return {"status": "ok", "service": "agentic-commerce-protocol", "version": "1.0.0"}
 
 
+@app.get("/skills")
+async def list_skills(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(AgentSkill).where(AgentSkill.id != "skl_placeholder").order_by(AgentSkill.name)
+    )
+    skills = result.scalars().all()
+    return [{"id": s.id, "name": s.name, "description": s.description} for s in skills]
+
+
+@app.get("/products/search")
+async def search_products(q: str, db: AsyncSession = Depends(get_db)):
+    """Case-insensitive text search over product name and description.
+
+    Returns up to 10 active results. Sorted by name so results are stable;
+    semantic ranking (embedding cosine) is a post-MVP concern (ADR-009)."""
+    from sqlalchemy import or_, case
+    results = await db.execute(
+        select(Product)
+        .where(
+            Product.is_active == True,  # noqa: E712
+            or_(
+                Product.name.ilike(f"%{q}%"),
+                Product.description.ilike(f"%{q}%"),
+            ),
+        )
+        # Title matches rank above description-only matches
+        .order_by(
+            case((Product.name.ilike(f"%{q}%"), 0), else_=1),
+            Product.listed_price,
+        )
+        .limit(10)
+    )
+    products = results.scalars().all()
+    return [
+        {
+            "id": p.id,
+            "title": p.name,
+            "description": p.description,
+            "listed_price": float(p.listed_price),
+            "floor_price": float(p.floor_price),
+            "category": p.category,
+            "merchant_id": p.merchant_id,
+        }
+        for p in products
+    ]
+
+
 @app.post("/agents/register")
 async def register_agent(req: RegisterAgentRequest, db: AsyncSession = Depends(get_db)):
     agent_id = generate_agent_id()
@@ -568,6 +617,7 @@ async def register_agent(req: RegisterAgentRequest, db: AsyncSession = Depends(g
         id=agent_id, role=AgentRole(req.role),
         public_key=base64.b64decode(public_b64),
         owner_id=req.owner_id,
+        owner_user_id=req.owner_user_id,
     )
     db.add(agent)
     await db.commit()
@@ -756,6 +806,11 @@ async def auction(
         allowed, reason = validate_spend(credential, 1.0, daily_spent)
         if not allowed:
             raise HTTPException(status_code=400, detail=f"Daily limit reached: {reason}")
+
+        # Cap policy_max to buyer's UI budget so the auction respects what they typed
+        if req.max_budget_inr is not None:
+            capped = min(float(credential["policy"]["max_per_txn"]), req.max_budget_inr)
+            credential = {**credential, "policy": {**credential["policy"], "max_per_txn": capped}}
 
         result = await run_auction(
             db=db,
@@ -1005,6 +1060,59 @@ async def checkout_session(
     except Exception:
         await db.rollback()
         raise
+
+
+class RazorpayOrderRequest(BaseModel):
+    session_id: str
+    amount_inr: float
+
+
+@app.post("/commerce/create-razorpay-order")
+async def create_razorpay_order_endpoint(
+    req: RazorpayOrderRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a Razorpay test order for any settled session.
+
+    This is a lightweight checkout alternative for the frontend payment step —
+    no idempotency required because the call is stateless on our side (we do not
+    write to the DB here; the webhook does). Falls back to a fake order ID in
+    test/dev when Razorpay credentials are absent."""
+    s_result = await db.execute(
+        select(NegotiationSession).where(NegotiationSession.id == req.session_id)
+    )
+    session = s_result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    amount_paise = int(req.amount_inr * 100)
+
+    if RAZORPAY_AVAILABLE:
+        try:
+            import razorpay
+            client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+            order = client.order.create({
+                "amount": amount_paise,
+                "currency": "INR",
+                "receipt": req.session_id[:40],
+                "notes": {"session_id": req.session_id},
+            })
+            return {
+                "order_id": order["id"],
+                "amount_paise": amount_paise,
+                "key_id": RAZORPAY_KEY_ID,
+            }
+        except Exception as exc:
+            logger.warning("Razorpay order creation failed: %s", exc)
+
+    # Test-mode fallback — deterministic fake order ID so the UI can show the
+    # payment step without real Razorpay credentials.
+    return {
+        "order_id": f"order_TEST_{req.session_id[:16]}",
+        "amount_paise": amount_paise,
+        "key_id": RAZORPAY_KEY_ID or "rzp_test_demo",
+        "test_mode": True,
+    }
 
 
 @app.post("/webhooks/razorpay")

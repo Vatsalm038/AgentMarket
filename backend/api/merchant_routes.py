@@ -28,6 +28,15 @@ router = APIRouter(prefix="/merchant", tags=["merchant"])
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
+class UpdateAgentRequest(BaseModel):
+    skill_id: str
+
+
+class CreateMerchantAgentRequest(BaseModel):
+    skill_id: str
+    merchant_name: str | None = None
+
+
 class MerchantProductCreate(BaseModel):
     title: str
     description: str
@@ -352,6 +361,105 @@ async def update_delivery(
         current_user.user_id, session_id, body.delivery_status,
     )
     return {"ok": True, "session_id": session_id, "delivery_status": body.delivery_status}
+
+
+@router.get("/agent")
+async def get_merchant_agent(
+    current_user: UserPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return the auto-created MerchantAgent for this user's merchant profile.
+
+    The agent is created when the first product is listed (see create_merchant_product).
+    Returns agent: null with a guidance message until then."""
+    if not current_user.is_merchant:
+        raise HTTPException(status_code=403, detail="Merchant access required")
+
+    merchant = await _require_merchant(current_user, db)
+    if not merchant:
+        return {"agent": None, "message": "No merchant profile yet. List a product first."}
+
+    ma_result = await db.execute(
+        select(MerchantAgent).where(MerchantAgent.merchant_id == merchant.id)
+    )
+    ma = ma_result.scalars().first()
+    if not ma:
+        return {"agent": None, "message": "No agent yet. List a product to auto-create one."}
+
+    return {
+        "agent": {
+            "agent_id": ma.id,
+            "merchant_id": merchant.id,
+            "skill_id": ma.skill_id,
+            "created_at": ma.created_at.isoformat(),
+        }
+    }
+
+
+@router.patch("/agent")
+async def update_merchant_agent_skill(
+    req: UpdateAgentRequest,
+    current_user: UserPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update negotiation skill on the merchant's agent."""
+    if not current_user.is_merchant:
+        raise HTTPException(status_code=403, detail="Merchant access required")
+    merchant = await _require_merchant(current_user, db)
+    if not merchant:
+        raise HTTPException(status_code=404, detail="No merchant profile")
+    ma_result = await db.execute(select(MerchantAgent).where(MerchantAgent.merchant_id == merchant.id))
+    ma = ma_result.scalars().first()
+    if not ma:
+        raise HTTPException(status_code=404, detail="No agent yet — list a product first")
+    skill_result = await db.execute(select(AgentSkill).where(AgentSkill.id == req.skill_id))
+    skill = skill_result.scalar_one_or_none()
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    ma.skill_id = req.skill_id
+    await db.commit()
+    return {"agent_id": ma.id, "skill_id": ma.skill_id, "skill_name": skill.name}
+
+
+@router.post("/agent/create", status_code=201)
+async def create_merchant_agent(
+    req: CreateMerchantAgentRequest,
+    current_user: UserPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create merchant profile + agent with chosen skill. Idempotent — updates skill if already exists."""
+    if not current_user.is_merchant:
+        raise HTTPException(status_code=403, detail="Merchant access required")
+
+    skill_result = await db.execute(select(AgentSkill).where(AgentSkill.id == req.skill_id))
+    skill = skill_result.scalar_one_or_none()
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+
+    merchant = await _require_merchant(current_user, db)
+    if not merchant:
+        merchant_id = f"merch_{uuid.uuid4().hex[:8]}"
+        merchant = Merchant(
+            id=merchant_id,
+            name=req.merchant_name or current_user.email,
+            owner_user_id=current_user.user_id,
+            address="-", city="Mumbai", pincode="400001", lat=19.076, lng=72.877,
+        )
+        db.add(merchant)
+        await db.flush()
+
+    ma_result = await db.execute(select(MerchantAgent).where(MerchantAgent.merchant_id == merchant.id))
+    ma = ma_result.scalars().first()
+    if not ma:
+        agent_id = f"ma_merch_{uuid.uuid4().hex[:8]}"
+        ma = MerchantAgent(id=agent_id, merchant_id=merchant.id, skill_id=req.skill_id, public_key=b"\x00" * 32)
+        db.add(ma)
+    else:
+        ma.skill_id = req.skill_id
+
+    await db.commit()
+    await db.refresh(ma)
+    return {"agent_id": ma.id, "merchant_id": merchant.id, "skill_id": ma.skill_id, "skill_name": skill.name, "created_at": ma.created_at.isoformat()}
 
 
 @router.get("/stats")

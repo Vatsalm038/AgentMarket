@@ -35,9 +35,9 @@ export function DeliveryTimeline({ deal }: DeliveryTimelineProps) {
               {/* Circle */}
               <div
                 className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-mono
-                  ${isCurrent ? "border-emerald-500 bg-emerald-500 text-white" :
-                    isPast    ? "border-zinc-600 bg-zinc-600 text-zinc-300" :
-                               "border-zinc-700 bg-zinc-800 text-zinc-600"}
+                  ${isCurrent ? "border-[#237B4B] bg-[#237B4B] text-white" :
+                    isPast    ? "border-[#D8E1EA] bg-[#D8E1EA] text-[#6C7F9A]" :
+                               "border-[#D8E1EA] bg-white text-[#9DACBE]"}
                 `}
               >
                 {isPast ? "✓" : i + 1}
@@ -45,9 +45,9 @@ export function DeliveryTimeline({ deal }: DeliveryTimelineProps) {
               {/* Label */}
               <span
                 className={`mt-1.5 text-[10px] text-center whitespace-nowrap
-                  ${isCurrent ? "text-emerald-400 font-medium" :
-                    isPast    ? "text-zinc-500" :
-                               "text-zinc-700"}
+                  ${isCurrent ? "text-[#237B4B] font-medium" :
+                    isPast    ? "text-[#6C7F9A]" :
+                               "text-[#9DACBE]"}
                 `}
               >
                 {step.label}
@@ -58,7 +58,7 @@ export function DeliveryTimeline({ deal }: DeliveryTimelineProps) {
             {i < STEPS.length - 1 && (
               <div
                 className={`flex-1 h-0.5 mt-[-14px] mx-1
-                  ${i < currentStep ? "bg-zinc-600" : "bg-zinc-800"}
+                  ${i < currentStep ? "bg-[#D8E1EA]" : "bg-[#E4EAF1]"}
                 `}
               />
             )}

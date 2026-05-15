@@ -12,7 +12,7 @@ session, and disputes ARE tied to sessions — so we write audit_log here.
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,6 +72,44 @@ async def _get_buyer_session(
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
+
+@router.get("/agents")
+async def list_buyer_agents(
+    current_user: UserPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all agents owned by the current buyer."""
+    result = await db.execute(
+        select(Agent).where(Agent.owner_user_id == current_user.user_id)
+    )
+    agents = result.scalars().all()
+    return [
+        {
+            "agent_id": a.id,
+            "name": a.owner_id,  # owner_id used as display name for legacy agents
+            "skill_id": None,
+            "created_at": a.created_at.isoformat(),
+        }
+        for a in agents
+    ]
+
+
+@router.delete("/agents/{agent_id}", status_code=204)
+async def delete_buyer_agent(
+    agent_id: str,
+    current_user: UserPayload = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Agent).where(Agent.id == agent_id, Agent.owner_user_id == current_user.user_id)
+    )
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    await db.delete(agent)
+    await db.commit()
+    return Response(status_code=204)
+
 
 @router.get("/deals")
 async def list_buyer_deals(
@@ -205,8 +243,11 @@ async def buyer_stats(
     sessions = result.scalars().all()
     total_deals = len(sessions)
 
-    # total_saved_inr: NegotiationSession has no max_price column; return 0.
-    total_saved = 0.0
+    total_saved = sum(
+        float(s.listed_price - s.final_price)
+        for s in sessions
+        if s.final_price is not None and s.listed_price is not None and s.listed_price > s.final_price
+    )
 
     return {
         "total_deals": total_deals,

@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 
-const CATEGORIES = ["groceries", "electronics", "clothing", "home", "food", "other"] as const
+const CATEGORIES = ["accessories", "clothing", "electronics", "food", "groceries", "home", "other"] as const
 
 export function MerchantProductNewPage() {
   const navigate = useNavigate()
@@ -56,15 +56,15 @@ export function MerchantProductNewPage() {
   }
 
   const inputClass =
-    "w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+    "w-full bg-white border border-[#D8E1EA] rounded-md px-3 py-2 text-sm text-[#131212] placeholder:text-[#9DACBE] focus:outline-none focus:ring-1 focus:ring-[#4F87C8]"
 
   return (
     <div className="space-y-6 max-w-xl">
-      <h1 className="text-xl font-semibold text-zinc-100">New Product</h1>
+      <h1 className="text-xl font-semibold text-[#131212]">New Product</h1>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-zinc-400">Title</label>
+          <label className="text-xs font-medium text-[#6C7F9A]">Title</label>
           <input
             required
             type="text"
@@ -76,7 +76,7 @@ export function MerchantProductNewPage() {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-zinc-400">Description</label>
+          <label className="text-xs font-medium text-[#6C7F9A]">Description</label>
           <textarea
             required
             rows={3}
@@ -88,7 +88,7 @@ export function MerchantProductNewPage() {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-zinc-400">Category</label>
+          <label className="text-xs font-medium text-[#6C7F9A]">Category</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -104,9 +104,9 @@ export function MerchantProductNewPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-zinc-400">Floor Price (₹)</label>
+            <label className="text-xs font-medium text-[#6C7F9A]">Floor Price (₹)</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">₹</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#6C7F9A]">₹</span>
               <input
                 required
                 type="number"
@@ -119,9 +119,9 @@ export function MerchantProductNewPage() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-zinc-400">Listed Price (₹)</label>
+            <label className="text-xs font-medium text-[#6C7F9A]">Listed Price (₹)</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">₹</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#6C7F9A]">₹</span>
               <input
                 required
                 type="number"
@@ -137,7 +137,7 @@ export function MerchantProductNewPage() {
 
         <div className="grid grid-cols-3 gap-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-zinc-400">Delivery radius (km)</label>
+            <label className="text-xs font-medium text-[#6C7F9A]">Delivery radius (km)</label>
             <input
               type="number"
               min={0}
@@ -148,7 +148,7 @@ export function MerchantProductNewPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-zinc-400">Min days</label>
+            <label className="text-xs font-medium text-[#6C7F9A]">Min days</label>
             <input
               type="number"
               min={0}
@@ -159,7 +159,7 @@ export function MerchantProductNewPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-zinc-400">Max days</label>
+            <label className="text-xs font-medium text-[#6C7F9A]">Max days</label>
             <input
               type="number"
               min={0}
@@ -172,7 +172,7 @@ export function MerchantProductNewPage() {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-zinc-400">
+          <label className="text-xs font-medium text-[#6C7F9A]">
             Image URL (optional, upload coming soon)
           </label>
           <input
@@ -184,12 +184,12 @@ export function MerchantProductNewPage() {
           />
         </div>
 
-        {formError && <p className="text-sm text-red-400">{formError}</p>}
+        {formError && <p className="text-sm text-[#AA2C2C]">{formError}</p>}
 
         <Button
           type="submit"
           disabled={create.isPending}
-          className="w-full bg-zinc-100 text-zinc-900 hover:bg-zinc-200 font-medium"
+          className="w-full bg-[#237B4B] text-white hover:bg-[#1A5F3D] font-medium"
         >
           {create.isPending ? "Creating…" : "Create Product"}
         </Button>

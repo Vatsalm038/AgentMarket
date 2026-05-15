@@ -14,7 +14,7 @@ export default defineConfig({
     proxy: {
       // Proxy /api/* → backend so we never hit CORS in dev
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8001',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ''),
       },

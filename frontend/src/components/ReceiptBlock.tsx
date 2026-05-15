@@ -37,10 +37,10 @@ export function ReceiptBlock({ receipt }: { receipt: SignedReceipt }) {
     ["Merchant agent", <span className="font-mono text-xs text-zinc-400">{truncateId(receipt.merchant_agent_id)}</span>],
     ["Settled at",     <span className="text-zinc-300">{formatTs(receipt.created_at)}</span>],
     ...(receipt.razorpay_order_id
-      ? [["Razorpay order", <span className="font-mono text-xs text-zinc-400">{receipt.razorpay_order_id}</span>] as [string, React.ReactNode]]
+      ? [["Payment order", <span className="font-mono text-xs text-zinc-400">{receipt.razorpay_order_id}</span>] as [string, React.ReactNode]]
       : []),
     ...(receipt.razorpay_payment_id
-      ? [["Razorpay payment", <span className="font-mono text-xs text-zinc-400">{receipt.razorpay_payment_id}</span>] as [string, React.ReactNode]]
+      ? [["Payment ID", <span className="font-mono text-xs text-zinc-400">{receipt.razorpay_payment_id}</span>] as [string, React.ReactNode]]
       : []),
   ]
 

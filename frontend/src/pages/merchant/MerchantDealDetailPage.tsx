@@ -54,15 +54,15 @@ export function MerchantDealDetailPage() {
   if (dealQuery.isLoading) {
     return (
       <div className="space-y-6 animate-pulse">
-        <div className="h-8 bg-zinc-800 rounded-md w-1/3" />
-        <div className="h-20 bg-zinc-800 rounded-md" />
-        <div className="h-48 bg-zinc-800 rounded-md" />
+        <div className="h-8 bg-[#E4EAF1] rounded-md w-1/3" />
+        <div className="h-20 bg-[#E4EAF1] rounded-md" />
+        <div className="h-48 bg-[#E4EAF1] rounded-md" />
       </div>
     )
   }
 
   if (dealQuery.isError) {
-    return <p className="text-sm text-red-400">Deal not found.</p>
+    return <p className="text-sm text-[#AA2C2C]">Deal not found.</p>
   }
 
   const deal = dealQuery.data!
@@ -83,12 +83,12 @@ export function MerchantDealDetailPage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="font-mono text-xs text-zinc-600">{id.slice(0, 16)}…</p>
-          <h1 className="text-xl font-semibold text-zinc-100">Deal Detail</h1>
+          <p className="font-mono text-xs text-[#9DACBE]">{id.slice(0, 16)}…</p>
+          <h1 className="text-xl font-semibold text-[#131212]">Deal Detail</h1>
           <StatusBadge status={deal.status} />
         </div>
         {deal.final_price != null && (
-          <PriceDisplay amount={deal.final_price} className="text-2xl text-sky-400" />
+          <PriceDisplay amount={deal.final_price} className="text-2xl text-sky-600" />
         )}
       </div>
 
@@ -97,7 +97,7 @@ export function MerchantDealDetailPage() {
       )}
 
       <section>
-        <h2 className="text-sm font-medium text-zinc-500 mb-4">Delivery Status</h2>
+        <h2 className="text-sm font-medium text-[#6C7F9A] mb-4">Delivery Status</h2>
         <DeliveryTimeline deal={deal} />
       </section>
 
@@ -106,7 +106,7 @@ export function MerchantDealDetailPage() {
         {(!deal.delivery_status || deal.delivery_status === "pending") && (
           <Button
             variant="ghost"
-            className="border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            className="border border-[#D8E1EA] text-[#6C7F9A] hover:bg-[#F5F8FA]"
             onClick={() => updateDelivery.mutate({ delivery_status: "dispatched" })}
             disabled={updateDelivery.isPending}
           >
@@ -116,7 +116,7 @@ export function MerchantDealDetailPage() {
         {deal.delivery_status === "dispatched" && (
           <Button
             variant="ghost"
-            className="border border-emerald-700 text-emerald-400 hover:bg-emerald-900/20"
+            className="border border-[#237B4B] text-[#237B4B] hover:bg-[#E6F4EA]"
             onClick={() => updateDelivery.mutate({ delivery_status: "delivered" })}
             disabled={updateDelivery.isPending}
           >
@@ -128,18 +128,18 @@ export function MerchantDealDetailPage() {
       {/* Upload proof URL */}
       <div className="flex gap-3 items-end">
         <div className="flex-1 space-y-1.5">
-          <label className="text-xs font-medium text-zinc-400">Proof image URL</label>
+          <label className="text-xs font-medium text-[#6C7F9A]">Proof image URL</label>
           <input
             type="url"
             value={proofUrl}
             onChange={(e) => setProofUrl(e.target.value)}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            className="w-full bg-white border border-[#D8E1EA] rounded-md px-3 py-2 text-sm text-[#131212] placeholder:text-[#9DACBE] focus:outline-none focus:ring-1 focus:ring-[#4F87C8]"
             placeholder="https://example.com/proof.jpg"
           />
         </div>
         <Button
           variant="ghost"
-          className="border border-zinc-700 text-zinc-300 hover:bg-zinc-800 shrink-0"
+          className="border border-[#D8E1EA] text-[#6C7F9A] hover:bg-[#F5F8FA] shrink-0"
           onClick={() => updateDelivery.mutate({ proof_image_url: proofUrl })}
           disabled={!proofUrl || updateDelivery.isPending}
         >
@@ -148,14 +148,14 @@ export function MerchantDealDetailPage() {
       </div>
 
       {sessionQuery.isLoading ? (
-        <div className="h-32 bg-zinc-800 rounded-md animate-pulse" />
+        <div className="h-32 bg-[#E4EAF1] rounded-md animate-pulse" />
       ) : session ? (
         <NegotiationTrail rounds={session.rounds} auditLog={auditLog} />
       ) : null}
 
       {receipt && (
         <section>
-          <h2 className="text-sm font-medium text-zinc-500 mb-3">Signed Receipt</h2>
+          <h2 className="text-sm font-medium text-[#6C7F9A] mb-3">Signed Receipt</h2>
           <ReceiptBlock receipt={receipt} />
         </section>
       )}

@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 
-// NavLink helper — active = zinc-100, inactive = zinc-400
+// NavItem active: green tint; inactive: secondary text with light hover
 function NavItem({ to, label }: { to: string; label: string }) {
   return (
     <NavLink
@@ -9,8 +9,8 @@ function NavItem({ to, label }: { to: string; label: string }) {
       className={({ isActive }) =>
         `block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
           isActive
-            ? "bg-zinc-800 text-zinc-100"
-            : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+            ? "bg-[#E6F4EA] text-[#237B4B] font-medium"
+            : "text-[#6C7F9A] hover:bg-[#F5F8FA] hover:text-[#131212]"
         }`
       }
     >
@@ -29,16 +29,16 @@ export function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-900 flex">
+    <div className="min-h-screen bg-[#F5F8FA] flex">
       {/* Sidebar */}
-      <aside className="w-56 bg-zinc-950 border-r border-zinc-800 flex flex-col shrink-0">
-        <div className="p-4 border-b border-zinc-800">
-          <span className="text-zinc-100 font-semibold tracking-tight">SignedDeals</span>
+      <aside className="w-56 bg-white border-r border-[#D8E1EA] flex flex-col shrink-0">
+        <div className="p-4 border-b border-[#D8E1EA]">
+          <span className="text-[#131212] font-semibold tracking-tight">SignedDeals</span>
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {user?.is_buyer && (
             <>
-              <p className="text-[10px] text-zinc-600 uppercase tracking-wider px-3 pt-2 pb-1">
+              <p className="text-[10px] text-[#9DACBE] uppercase tracking-wider px-3 pt-3 pb-1">
                 Buyer
               </p>
               <NavItem to="/buyer/dashboard" label="Dashboard" />
@@ -49,25 +49,26 @@ export function AppLayout() {
           )}
           {user?.is_merchant && (
             <>
-              <p className="text-[10px] text-zinc-600 uppercase tracking-wider px-3 pt-2 pb-1">
+              <p className="text-[10px] text-[#9DACBE] uppercase tracking-wider px-3 pt-3 pb-1">
                 Merchant
               </p>
               <NavItem to="/merchant/dashboard" label="Dashboard" />
               <NavItem to="/merchant/products" label="Products" />
               <NavItem to="/merchant/deals" label="Deals" />
+              <NavItem to="/merchant/agent" label="My Agent" />
             </>
           )}
-          <p className="text-[10px] text-zinc-600 uppercase tracking-wider px-3 pt-4 pb-1">
+          <p className="text-[10px] text-[#9DACBE] uppercase tracking-wider px-3 pt-3 pb-1">
             Platform
           </p>
           <NavItem to="/sessions" label="Audit Log" />
           <NavItem to="/verify" label="Verify Receipt" />
         </nav>
-        <div className="p-3 border-t border-zinc-800">
-          <p className="text-xs text-zinc-500 px-3 truncate mb-1">{user?.email}</p>
+        <div className="p-3 border-t border-[#D8E1EA]">
+          <p className="text-xs text-[#9DACBE] px-3 truncate mb-1">{user?.email}</p>
           <button
             onClick={handleLogout}
-            className="w-full text-left px-3 py-2 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-md transition-colors"
+            className="w-full text-left px-3 py-2 text-sm text-[#6C7F9A] hover:text-[#131212] hover:bg-[#F5F8FA] rounded-md transition-colors"
           >
             Sign out
           </button>
@@ -75,7 +76,7 @@ export function AppLayout() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto bg-[#F5F8FA]">
         <div className="max-w-5xl mx-auto px-6 py-8">
           <Outlet />
         </div>

@@ -19,27 +19,27 @@ export function MerchantDealsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold text-zinc-100">Deals</h1>
+      <h1 className="text-xl font-semibold text-[#131212]">Deals</h1>
 
       {isLoading ? (
         <div className="space-y-2 animate-pulse">
-          {[1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded-md" />)}
+          {[1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-[#E4EAF1] rounded-md" />)}
         </div>
       ) : isError ? (
-        <p className="text-sm text-red-400">Failed to load deals.</p>
+        <p className="text-sm text-[#AA2C2C]">Failed to load deals.</p>
       ) : !data || data.length === 0 ? (
-        <div className="text-center py-16 border border-zinc-800 rounded-md">
-          <p className="text-sm text-zinc-500">No deals yet.</p>
+        <div className="text-center py-16 border border-[#D8E1EA] rounded-md">
+          <p className="text-sm text-[#6C7F9A]">No deals yet.</p>
         </div>
       ) : (
-        <div className="border border-zinc-700 rounded-md overflow-hidden">
+        <div className="border border-[#D8E1EA] rounded-md overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-zinc-800 border-b border-zinc-700">
+              <tr className="bg-[#F5F8FA] border-b border-[#D8E1EA]">
                 {["Session ID", "Status", "Final Price", "Date"].map((h) => (
                   <th
                     key={h}
-                    className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-zinc-500"
+                    className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#9DACBE]"
                   >
                     {h}
                   </th>
@@ -50,12 +50,12 @@ export function MerchantDealsPage() {
               {data.map((deal) => (
                 <tr
                   key={deal.id}
-                  className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800 transition-colors"
+                  className="border-b border-[#E4EAF1] last:border-0 hover:bg-[#F5F8FA] transition-colors"
                 >
                   <td className="px-4 py-3">
                     <Link
                       to={`/merchant/deal/${deal.id}`}
-                      className="font-mono text-xs text-zinc-400 hover:text-zinc-100"
+                      className="font-mono text-xs text-[#6C7F9A] hover:text-[#131212]"
                     >
                       {deal.id.slice(0, 12)}…
                     </Link>
@@ -63,14 +63,14 @@ export function MerchantDealsPage() {
                   <td className="px-4 py-3">
                     <StatusBadge status={deal.status} />
                   </td>
-                  <td className="px-4 py-3 text-zinc-300">
+                  <td className="px-4 py-3 text-[#131212]">
                     {deal.final_price != null ? (
                       <PriceDisplay amount={deal.final_price} />
                     ) : (
-                      <span className="text-zinc-600">—</span>
+                      <span className="text-[#9DACBE]">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-600">
+                  <td className="px-4 py-3 font-mono text-xs text-[#9DACBE]">
                     {new Date(deal.created_at).toLocaleDateString("en-IN")}
                   </td>
                 </tr>

@@ -14,15 +14,15 @@ interface BuyerStats {
 
 function StatCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="bg-zinc-800 border border-zinc-700 rounded-md p-5">
-      <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">{label}</p>
-      <div className="text-2xl font-semibold text-zinc-100">{value}</div>
+    <div className="bg-white border border-[#D8E1EA] rounded-md p-5">
+      <p className="text-xs text-[#9DACBE] uppercase tracking-wider mb-1">{label}</p>
+      <div className="text-2xl font-semibold text-[#131212]">{value}</div>
     </div>
   )
 }
 
 function SkeletonCard() {
-  return <div className="h-24 bg-zinc-800 border border-zinc-700 rounded-md animate-pulse" />
+  return <div className="h-24 bg-white border border-[#D8E1EA] rounded-md animate-pulse" />
 }
 
 export function BuyerDashboardPage() {
@@ -49,10 +49,10 @@ export function BuyerDashboardPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-100">Buyer Dashboard</h1>
+        <h1 className="text-xl font-semibold text-[#131212]">Buyer Dashboard</h1>
         <Link
           to="/buyer/search"
-          className="text-sm text-zinc-400 hover:text-zinc-100 border border-zinc-700 px-3 py-1.5 rounded-md transition-colors"
+          className="text-sm text-[#6C7F9A] hover:text-[#131212] border border-[#D8E1EA] px-3 py-1.5 rounded-md transition-colors hover:bg-[#F5F8FA]"
         >
           Start searching →
         </Link>
@@ -67,7 +67,7 @@ export function BuyerDashboardPage() {
             <SkeletonCard />
           </>
         ) : statsQuery.isError ? (
-          <p className="col-span-3 text-sm text-red-400">Failed to load stats.</p>
+          <p className="col-span-3 text-sm text-[#AA2C2C]">Failed to load stats.</p>
         ) : (
           <>
             <StatCard label="Total Deals" value={statsQuery.data?.total_deals ?? 0} />
@@ -76,7 +76,7 @@ export function BuyerDashboardPage() {
               value={
                 <PriceDisplay
                   amount={statsQuery.data?.total_saved_inr ?? 0}
-                  className="text-emerald-400"
+                  className="text-[#237B4B]"
                 />
               }
             />
@@ -87,31 +87,31 @@ export function BuyerDashboardPage() {
 
       {/* Recent deals */}
       <div>
-        <h2 className="text-sm font-medium text-zinc-500 mb-3">Recent Deals</h2>
+        <h2 className="text-sm font-medium text-[#6C7F9A] mb-3">Recent Deals</h2>
         {dealsQuery.isLoading ? (
           <div className="space-y-2 animate-pulse">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 bg-zinc-800 rounded-md" />
+              <div key={i} className="h-12 bg-[#E4EAF1] rounded-md" />
             ))}
           </div>
         ) : dealsQuery.isError ? (
-          <p className="text-sm text-red-400">Failed to load deals.</p>
+          <p className="text-sm text-[#AA2C2C]">Failed to load deals.</p>
         ) : recentDeals.length === 0 ? (
-          <div className="text-center py-12 border border-zinc-800 rounded-md">
-            <p className="text-sm text-zinc-500">No deals yet.</p>
-            <Link to="/buyer/search" className="mt-2 inline-block text-sm text-zinc-300 underline underline-offset-2">
+          <div className="text-center py-12 border border-[#D8E1EA] rounded-md">
+            <p className="text-sm text-[#6C7F9A]">No deals yet.</p>
+            <Link to="/buyer/search" className="mt-2 inline-block text-sm text-[#131212] underline underline-offset-2">
               Start a search
             </Link>
           </div>
         ) : (
-          <div className="border border-zinc-700 rounded-md overflow-hidden">
+          <div className="border border-[#D8E1EA] rounded-md overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-zinc-800 border-b border-zinc-700">
+                <tr className="bg-[#F5F8FA] border-b border-[#D8E1EA]">
                   {["Status", "Final Price", "Date"].map((h) => (
                     <th
                       key={h}
-                      className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-zinc-500"
+                      className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-[#9DACBE]"
                     >
                       {h}
                     </th>
@@ -122,21 +122,21 @@ export function BuyerDashboardPage() {
                 {recentDeals.map((deal) => (
                   <tr
                     key={deal.id}
-                    className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800 transition-colors"
+                    className="border-b border-[#E4EAF1] last:border-0 hover:bg-[#F5F8FA] transition-colors"
                   >
                     <td className="px-4 py-3">
                       <Link to={`/buyer/deal/${deal.id}`}>
                         <StatusBadge status={deal.status} />
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-zinc-300">
+                    <td className="px-4 py-3 text-[#131212]">
                       {deal.final_price != null ? (
                         <PriceDisplay amount={deal.final_price} />
                       ) : (
-                        <span className="text-zinc-600">—</span>
+                        <span className="text-[#9DACBE]">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-600">
+                    <td className="px-4 py-3 font-mono text-xs text-[#9DACBE]">
                       {new Date(deal.created_at).toLocaleDateString("en-IN")}
                     </td>
                   </tr>

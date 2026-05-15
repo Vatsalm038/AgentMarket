@@ -3,7 +3,6 @@ import { AuthProvider } from "@/contexts/AuthContext"
 import { RequireAuth } from "@/components/RequireAuth"
 import { AppLayout } from "@/layouts/AppLayout"
 import { FullscreenLayout } from "@/layouts/FullscreenLayout"
-import { Layout } from "@/components/Layout"
 
 // Existing pages
 import { LandingPage } from "@/pages/LandingPage"
@@ -28,14 +27,15 @@ import { MerchantProductsPage } from "@/pages/merchant/MerchantProductsPage"
 import { MerchantProductNewPage } from "@/pages/merchant/MerchantProductNewPage"
 import { MerchantDealsPage } from "@/pages/merchant/MerchantDealsPage"
 import { MerchantDealDetailPage } from "@/pages/merchant/MerchantDealDetailPage"
+import { MerchantAgentPage } from "@/pages/merchant/MerchantAgentPage"
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public marketing — uses existing Layout */}
-          <Route path="/" element={<Layout><LandingPage /></Layout>} />
+          {/* Public marketing — bare, no Layout wrapper; LandingPage owns its nav/footer */}
+          <Route path="/" element={<LandingPage />} />
 
           {/* Auth — fullscreen, no sidebar */}
           <Route element={<FullscreenLayout />}>
@@ -66,6 +66,7 @@ export default function App() {
             <Route path="/merchant/products/new" element={<MerchantProductNewPage />} />
             <Route path="/merchant/deals" element={<MerchantDealsPage />} />
             <Route path="/merchant/deal/:id" element={<MerchantDealDetailPage />} />
+            <Route path="/merchant/agent" element={<MerchantAgentPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/session/:id" element={<SessionDetailPage />} />
           </Route>

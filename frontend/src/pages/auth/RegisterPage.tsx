@@ -12,8 +12,6 @@ export function RegisterPage() {
   const [displayName, setDisplayName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [isBuyer, setIsBuyer] = useState(false)
-  const [isMerchant, setIsMerchant] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false)
 
@@ -21,21 +19,28 @@ export function RegisterPage() {
     e.preventDefault()
     setError(null)
 
-    if (!isBuyer && !isMerchant) {
-      setError("Select at least one role.")
+    if (!role) {
+      setError("Select a role to continue.")
       return
     }
 
     setIsPending(true)
     try {
-      const res = await api.post<{ access_token: string; user: AuthUser }>("/auth/register", {
+      const res = await api.post<{
+        access_token: string
+        user_id: string
+        email: string
+        is_buyer: boolean
+        is_merchant: boolean
+      }>("/auth/register", {
         email,
         password,
         display_name: displayName || null,
-        is_buyer: isBuyer,
-        is_merchant: isMerchant,
+        is_buyer: role === "buyer",
+        is_merchant: role === "merchant",
       })
-      const { access_token, user } = res.data
+      const { access_token, user_id, email: userEmail, is_buyer, is_merchant } = res.data
+      const user: AuthUser = { id: user_id, email: userEmail, display_name: displayName || null, is_buyer, is_merchant }
       login(access_token, user)
       navigate(user.is_buyer ? "/buyer/dashboard" : "/merchant/dashboard", { replace: true })
     } catch (err: unknown) {
@@ -48,21 +53,26 @@ export function RegisterPage() {
     }
   }
 
+  type Role = "buyer" | "merchant" | null
+  const [role, setRole] = useState<Role>(null)
+  const isBuyerSelected = role === "buyer"
+  const isMerchantSelected = role === "merchant"
+
   const roleCardBase =
-    "flex-1 border rounded-md p-4 cursor-pointer transition-colors text-left space-y-1 select-none"
-  const roleCardActive = "border-emerald-500 bg-emerald-500/5"
-  const roleCardInactive = "border-zinc-700 bg-zinc-800 hover:border-zinc-600"
+    "w-full border rounded-md p-4 cursor-pointer transition-colors text-left space-y-1 select-none"
+  const roleCardActive = "border-[#237B4B] bg-[#E6F4EA]"
+  const roleCardInactive = "border-[#D8E1EA] bg-[#F5F8FA] hover:border-[#B9C6D8]"
 
   return (
-    <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-md p-8 space-y-6">
+    <div className="w-full max-w-sm bg-white border border-[#D8E1EA] rounded-lg p-8 space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-zinc-100">Create account</h1>
-        <p className="text-sm text-zinc-500">Join SignedDeals today.</p>
+        <h1 className="text-xl font-semibold text-[#131212]">Create account</h1>
+        <p className="text-sm text-[#6C7F9A]">Join SignedDeals today.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-zinc-400" htmlFor="display_name">
+          <label className="text-xs font-medium text-[#6C7F9A]" htmlFor="display_name">
             Display name (optional)
           </label>
           <input
@@ -70,13 +80,13 @@ export function RegisterPage() {
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            className="w-full bg-[#F5F8FA] border border-[#D8E1EA] rounded-md px-3 py-2 text-sm text-[#131212] placeholder-[#9DACBE] focus:outline-none focus:ring-1 focus:ring-[#4F87C8] focus:border-[#4F87C8]"
             placeholder="Ravi Sharma"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-zinc-400" htmlFor="reg_email">
+          <label className="text-xs font-medium text-[#6C7F9A]" htmlFor="reg_email">
             Email
           </label>
           <input
@@ -85,13 +95,13 @@ export function RegisterPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            className="w-full bg-[#F5F8FA] border border-[#D8E1EA] rounded-md px-3 py-2 text-sm text-[#131212] placeholder-[#9DACBE] focus:outline-none focus:ring-1 focus:ring-[#4F87C8] focus:border-[#4F87C8]"
             placeholder="you@example.com"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-zinc-400" htmlFor="reg_password">
+          <label className="text-xs font-medium text-[#6C7F9A]" htmlFor="reg_password">
             Password
           </label>
           <input
@@ -100,51 +110,51 @@ export function RegisterPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            className="w-full bg-[#F5F8FA] border border-[#D8E1EA] rounded-md px-3 py-2 text-sm text-[#131212] placeholder-[#9DACBE] focus:outline-none focus:ring-1 focus:ring-[#4F87C8] focus:border-[#4F87C8]"
             placeholder="••••••••"
           />
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-medium text-zinc-400">I want to…</p>
-          <div className="flex gap-3">
+          <p className="text-xs font-medium text-[#6C7F9A]">I want to…</p>
+          <div className="flex flex-col gap-2">
             <button
               type="button"
-              onClick={() => setIsBuyer((v) => !v)}
-              className={`${roleCardBase} ${isBuyer ? roleCardActive : roleCardInactive}`}
+              onClick={() => setRole("buyer")}
+              className={`${roleCardBase} ${isBuyerSelected ? roleCardActive : roleCardInactive}`}
             >
-              <p className={`text-sm font-medium ${isBuyer ? "text-emerald-400" : "text-zinc-200"}`}>
+              <p className={`text-sm font-medium ${isBuyerSelected ? "text-[#237B4B]" : "text-[#131212]"}`}>
                 Buy
               </p>
-              <p className="text-xs text-zinc-500">Search products, run agents</p>
+              <p className="text-xs text-[#6C7F9A]">Search products, run agents</p>
             </button>
             <button
               type="button"
-              onClick={() => setIsMerchant((v) => !v)}
-              className={`${roleCardBase} ${isMerchant ? roleCardActive : roleCardInactive}`}
+              onClick={() => setRole("merchant")}
+              className={`${roleCardBase} ${isMerchantSelected ? roleCardActive : roleCardInactive}`}
             >
-              <p className={`text-sm font-medium ${isMerchant ? "text-emerald-400" : "text-zinc-200"}`}>
+              <p className={`text-sm font-medium ${isMerchantSelected ? "text-[#237B4B]" : "text-[#131212]"}`}>
                 Sell
               </p>
-              <p className="text-xs text-zinc-500">List products, fulfill orders</p>
+              <p className="text-xs text-[#6C7F9A]">List products, fulfill orders</p>
             </button>
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[#AA2C2C]">{error}</p>}
 
         <Button
           type="submit"
           disabled={isPending}
-          className="w-full bg-zinc-100 text-zinc-900 hover:bg-zinc-200 font-medium"
+          className="w-full bg-[#237B4B] text-white hover:bg-[#1A5F3D] font-medium rounded-md py-2 text-sm"
         >
           {isPending ? "Creating account…" : "Create account"}
         </Button>
       </form>
 
-      <p className="text-sm text-zinc-500 text-center">
+      <p className="text-sm text-[#6C7F9A] text-center">
         Already have an account?{" "}
-        <Link to="/login" className="text-zinc-300 hover:text-zinc-100 underline underline-offset-2">
+        <Link to="/login" className="text-[#237B4B] hover:text-[#1A5F3D] underline underline-offset-2">
           Sign in
         </Link>
       </p>

@@ -6,7 +6,15 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ensure Inter is applied globally; Tailwind's font-sans class inherits this */
-body {
-  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Inter globally; JetBrains Mono applied via font-mono Tailwind class */
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
