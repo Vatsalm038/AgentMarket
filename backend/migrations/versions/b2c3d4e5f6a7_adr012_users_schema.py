@@ -116,10 +116,32 @@ def upgrade() -> None:
         ADD COLUMN IF NOT EXISTS platform_fee_pct    NUMERIC(6, 4)
     """)
 
+    # 8. audit_log schema fixes — initial migration used INTEGER id + missing agent_id.
+    #    Models.py uses UUID id + agent_id TEXT. Fix both.
+    op.execute("""
+        ALTER TABLE audit_log
+        ADD COLUMN IF NOT EXISTS agent_id TEXT NOT NULL DEFAULT ''
+    """)
+    # Convert audit_log.id from SERIAL INTEGER to UUID only if it's still integer type
+    op.execute("""
+        DO $$
+        BEGIN
+            IF (SELECT data_type FROM information_schema.columns
+                WHERE table_name='audit_log' AND column_name='id') = 'integer' THEN
+                DROP INDEX IF EXISTS ix_audit_session_ts;
+                ALTER TABLE audit_log DROP CONSTRAINT IF EXISTS audit_log_pkey;
+                ALTER TABLE audit_log DROP COLUMN id;
+                ALTER TABLE audit_log ADD COLUMN id UUID PRIMARY KEY DEFAULT gen_random_uuid();
+                CREATE INDEX IF NOT EXISTS ix_audit_session_ts ON audit_log (session_id, timestamp);
+            END IF;
+        END$$
+    """)
+
 
 def downgrade() -> None:
     # Remove in reverse order. Enum value removal is unsupported in Postgres;
     # drop and recreate would lose data — skip the enum downgrade.
+    op.execute("ALTER TABLE audit_log DROP COLUMN IF EXISTS agent_id")
     op.execute("ALTER TABLE signed_receipts DROP COLUMN IF EXISTS platform_fee_paise")
     op.execute("ALTER TABLE signed_receipts DROP COLUMN IF EXISTS platform_fee_pct")
     op.execute("ALTER TABLE negotiation_sessions DROP COLUMN IF EXISTS pay_later_due_date")
