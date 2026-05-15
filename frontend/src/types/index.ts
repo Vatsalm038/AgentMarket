@@ -1,3 +1,47 @@
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  id: string
+  email: string
+  display_name: string | null
+  is_buyer: boolean
+  is_merchant: boolean
+}
+
+export interface Product {
+  id: string
+  title: string
+  description: string
+  category: string
+  floor_price_inr: number
+  listed_price_inr: number
+  delivery_radius_km: number | null
+  delivery_days_min: number | null
+  delivery_days_max: number | null
+  image_url: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface Deal {
+  id: string
+  status: string
+  payment_status: string | null
+  delivery_status: string | null
+  final_price: number | null
+  platform_fee_amount: number | null
+  created_at: string
+  product_id?: string
+}
+
+export interface Skill {
+  id: string
+  name: string
+  description: string
+  owner_user_id: string | null
+  visibility: string
+}
+
 // ─── GET /commerce/sessions ──────────────────────────────────────────────────
 
 export interface SessionSummary {

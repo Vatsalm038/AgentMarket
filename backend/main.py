@@ -51,6 +51,8 @@ from models import (Agent, AgentRole, AgentSkill, AuditLog, IdempotencyKey, Merc
                     MerchantAgent, NegotiationSession, Product,
                     SignedReceipt, SpendingPolicy, TxnStatus, User)
 from auth import UserPayload, create_access_token, get_current_user, hash_password, verify_password
+from api.merchant_routes import router as merchant_router
+from api.buyer_routes import router as buyer_router
 from negotiation import run_negotiation
 from razorpay_settlement import (settle_via_razorpay, create_razorpay_order,
                                  RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
@@ -156,6 +158,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(merchant_router)
+app.include_router(buyer_router)
 
 
 # ── Pydantic models ─────────────────────────────────────────────────────────
